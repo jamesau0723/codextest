@@ -16,7 +16,11 @@ import { fileURLToPath } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, '..');
-const OUT_DIR = join(ROOT, 'public', 'fonts');
+// Emitted next to the stylesheet that references them, NOT into public/: the
+// bundler then rewrites the relative url() and copies the files, so they keep
+// working under an asset prefix or a sub-path deployment. An absolute
+// /fonts/... path silently 404s in both cases.
+const OUT_DIR = join(ROOT, 'app', '_fonts');
 const CSS_OUT = join(ROOT, 'app', 'fonts-cjk.css');
 
 /** Files whose Chinese characters must be renderable. */
@@ -88,7 +92,7 @@ for (const { family, slug, weights } of FAMILIES) {
         `  font-style: normal;\n` +
         `  font-weight: ${weight};\n` +
         `  font-display: swap;\n` +
-        `  src: url('/fonts/${file}') format('woff2');\n` +
+        `  src: url('./_fonts/${file}') format('woff2');\n` +
         `}`
     );
   }
