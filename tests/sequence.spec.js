@@ -237,7 +237,7 @@ test('Dawn becomes D and D FESTIVAL, and the passage does not repeat', async ({ 
       awnOpacity: Number(getComputedStyle(awn).opacity),
       festival: festival.textContent,
       festivalOpacity: Number(getComputedStyle(festival).opacity),
-      enterVisible: Boolean(document.querySelector('[data-action="enter"]'))
+      anyButton: document.querySelectorAll('.d-entrance button').length
     };
   });
 
@@ -246,12 +246,8 @@ test('Dawn becomes D and D FESTIVAL, and the passage does not repeat', async ({ 
   expect(final.awnOpacity).toBeLessThan(0.02);
   expect(final.festival).toBe('D FESTIVAL');
   expect(final.festivalOpacity).toBeGreaterThan(0.98);
-  expect(final.enterVisible).toBe(true);
-
-  // The final composition waits without a time limit and never restarts.
-  await page.waitForTimeout(3000);
-  await expect(page.locator('[data-scene="final"]')).toBeVisible();
-  expect(await page.locator('[data-scene="words"]').count()).toBe(0);
+  // Nothing to press: the final frame carries no control at all.
+  expect(final.anyButton).toBe(0);
 
   // The D is horizontally centred once `awn` has dissolved.
   const offset = await page.evaluate(() => {
@@ -259,15 +255,113 @@ test('Dawn becomes D and D FESTIVAL, and the passage does not repeat', async ({ 
     return Math.abs((rect.left + rect.right) / 2 - window.innerWidth / 2);
   });
   expect(offset).toBeLessThanOrEqual(2);
+
+  // The passage runs once; it never loops back to the words.
+  expect(await page.locator('[data-scene="words"]').count()).toBe(0);
 });
 
-test('Enter D is available from the start of the word passage', async ({ page }) => {
+test('the final frame enters the homepage on its own, with no press', async ({ page }) => {
   await openEntrance(page);
   await reachWords(page, 'en');
-  const enter = page.locator('[data-action="enter"]');
-  await expect(enter).toBeVisible();
-  await expect(enter).toBeEnabled();
-  await expect(enter).toHaveText('Enter D');
+  await page.locator('[data-scene="final"]').waitFor({ timeout: 20_000 });
+
+  // No control anywhere in the sequence to reach this point.
+  expect(await page.locator('.d-entrance button').count()).toBe(0);
+
+  // The zoom begins by itself once the composition has held.
+  await expect
+    .poll(async () => page.locator('.d-entrance').getAttribute('data-zooming'), { timeout: 6000 })
+    .toBe('true');
+
+  // The footage keeps playing while it travels, and the scrim clears.
+  const during = await page.evaluate(() => {
+    const video = document.querySelector('video');
+    const scrim = document.querySelector('.d-entrance__scrim');
+    return {
+      playing: video ? !video.paused : false,
+      scrimOpacity: scrim ? Number(getComputedStyle(scrim).opacity) : 1
+    };
+  });
+  expect(during.playing).toBe(true);
+  expect(during.scrimOpacity).toBeLessThan(1);
+
+  // It lands in the homepage hero, still playing, marked completed.
+  await expect(page.locator('.d-entrance')).toHaveCount(0, { timeout: 8000 });
+  const after = await page.evaluate(() => {
+    const video = document.querySelector('.site-hero video');
+    return {
+      inHero: Boolean(video),
+      paused: video?.paused,
+      outcome: localStorage.getItem('dFestival.entranceOutcome'),
+      bodyOverflow: document.body.style.overflow,
+      // The zoom's inline geometry must not be left on the layer.
+      layerStyle: document.querySelector('.d-media-layer')?.getAttribute('style') ?? ''
+    };
+  });
+  expect(after.inHero).toBe(true);
+  expect(after.paused).toBe(false);
+  expect(after.outcome).toBe('completed');
+  expect(after.bodyOverflow).toBe('');
+  expect(after.layerStyle).toBe('');
+});
+
+test('the cinematic bottom edge softens the footage without touching the text', async ({ page }) => {
+  await openEntrance(page);
+  const edge = page.locator('.d-entrance__filmedge');
+  await expect(edge).toHaveCount(1);
+
+  const layering = await page.evaluate(() => {
+    const node = document.querySelector('.d-entrance__filmedge');
+    const style = getComputedStyle(node);
+    const ui = document.querySelector('.d-entrance__ui');
+    const rect = node.getBoundingClientRect();
+    return {
+      zIndex: Number(style.zIndex),
+      uiZIndex: Number(getComputedStyle(ui).zIndex),
+      pointerEvents: style.pointerEvents,
+      backdrop: style.backdropFilter || style.webkitBackdropFilter,
+      atBottom: Math.abs(rect.bottom - window.innerHeight) <= 1,
+      fullWidth: Math.abs(rect.width - window.innerWidth) <= 1
+    };
+  });
+
+  // Above the footage, below the text, and never in the way of the gesture.
+  expect(layering.zIndex).toBeLessThan(layering.uiZIndex);
+  expect(layering.pointerEvents).toBe('none');
+  expect(layering.backdrop).toContain('blur');
+  expect(layering.atBottom).toBe(true);
+  expect(layering.fullWidth).toBe(true);
+});
+
+test('the word passage carries no control at all', async ({ page }) => {
+  await openEntrance(page);
+  await reachWords(page, 'en');
+  // Skip, pause and Enter were all removed at the client's request; the hold
+  // gesture and Escape are the remaining ways out before it auto-enters.
+  expect(await page.locator('.d-entrance button').count()).toBe(0);
+});
+
+test('the display faces are the ones the design specifies', async ({ page }) => {
+  await openEntrance(page);
+  await page.locator('.d-language__option[data-locale="zh-Hant"]').click();
+  await page.locator('[data-scene="question1"]').waitFor();
+  await expect
+    .poll(async () => page.evaluate(() => document.fonts.status), { timeout: 8000 })
+    .toBe('loaded');
+
+  const faces = await page.evaluate(() => ({
+    question: getComputedStyle(document.querySelector('.d-scene__question')).fontFamily,
+    loaded: Array.from(document.fonts)
+      .filter((face) => face.status === 'loaded')
+      .map((face) => face.family)
+  }));
+
+  // Chinese resolves to the Hong Kong Song serif FIRST, ahead of any generic
+  // serif that might also carry the glyphs. (The computed value quotes the
+  // family name, so compare the first entry rather than a raw index.)
+  expect(faces.question.split(',')[0].replace(/["']/g, '').trim()).toBe('Noto Serif HK');
+  expect(new Set(faces.loaded)).toContain('Noto Serif HK');
+  expect(new Set(faces.loaded)).toContain('Cormorant Garamond');
 });
 
 test('the excluded decorations are absent', async ({ page }) => {

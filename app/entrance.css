@@ -37,10 +37,13 @@
   --scrub-distance: calc(var(--viewport-h) * 1.15);
   --content-inline: calc(var(--edge-x) + max(var(--safe-l), var(--safe-r)));
 
-  --font-display: 'Source Serif 4', 'Noto Serif TC', 'Noto Serif SC', Georgia,
-    'Times New Roman', 'Songti TC', 'SimSun', serif;
-  --font-ui: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue',
-    Arial, 'Noto Sans TC', 'Noto Sans SC', sans-serif;
+  /* Cormorant Garamond sets the Latin; the browser falls through to the Noto
+     Song serif for any glyph Cormorant does not carry, so one stack serves both
+     scripts. Order decides which Chinese glyph forms win where both apply. */
+  --font-display: var(--font-display-latin), 'Noto Serif HK', 'Noto Serif SC',
+    Georgia, 'Times New Roman', serif;
+  --font-ui: var(--font-ui-sans), system-ui, -apple-system, 'Segoe UI',
+    'Helvetica Neue', Arial, sans-serif;
 
   --size-question: clamp(28px, 4.2vw + 14px, 60px);
   --word-size: clamp(40px, 8vw + 8px, 112px);
@@ -65,6 +68,8 @@
   background: #000;
   isolation: isolate;
   color: #fff;
+  /* Animated by Framer Motion on a zoom exit, so the homepage shows around the
+     shrinking frame. */
   z-index: var(--z-entrance, 1000);
   font-family: var(--font-ui);
 }
@@ -142,6 +147,43 @@
   z-index: 2;
   background: rgb(0 0 0 / var(--overlay-alpha));
   pointer-events: none;
+}
+
+/* Cinematic soft edge along the bottom of the footage.
+   The backdrop is blurred through a gradient mask, so the blur is strongest at
+   the very bottom and reaches nothing by the top of the band — a soft optical
+   falloff rather than a hard letterbox. The darkening gradient underneath does
+   the work on its own where backdrop-filter is unavailable.
+   It sits above the scrim and below the UI, so it never blurs the text. */
+.d-entrance__filmedge {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: clamp(110px, 20vh, 240px);
+  z-index: 2;
+  pointer-events: none;
+  background: linear-gradient(
+    to top,
+    rgb(0 0 0 / 0.66) 0%,
+    rgb(0 0 0 / 0.34) 42%,
+    rgb(0 0 0 / 0) 100%
+  );
+}
+
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .d-entrance__filmedge {
+    -webkit-backdrop-filter: blur(16px);
+    backdrop-filter: blur(16px);
+    -webkit-mask-image: linear-gradient(to top, #000 0%, rgb(0 0 0 / 0.55) 46%, transparent 100%);
+    mask-image: linear-gradient(to top, #000 0%, rgb(0 0 0 / 0.55) 46%, transparent 100%);
+  }
+}
+
+/* The edge is a look for the entrance, not for the hero it hands over to. */
+.d-entrance[data-zooming='true'] .d-entrance__filmedge {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 
 /* ── Foreground ─────────────────────────────────────────────────────────────
@@ -232,8 +274,9 @@
   margin: 0 0 28px;
   font-family: var(--font-display);
   font-size: var(--size-heading);
-  font-weight: 400;
+  font-weight: 300;
   line-height: 1.25;
+  letter-spacing: 0.012em;
   color: #fff;
 }
 
@@ -263,7 +306,9 @@
 .d-language__option {
   min-width: 190px;
   font-family: var(--font-display);
-  font-size: clamp(17px, 0.6vw + 15px, 20px);
+  font-size: clamp(19px, 0.7vw + 16px, 23px);
+  font-weight: 400;
+  letter-spacing: 0.06em;
 }
 
 /* ── Scenes 2 and 3: typed questions ────────────────────────────────────── */
@@ -274,8 +319,9 @@
   max-width: 18ch;
   font-family: var(--font-display);
   font-size: var(--size-question);
-  font-weight: 400;
-  line-height: 1.32;
+  font-weight: 300;
+  line-height: 1.34;
+  letter-spacing: 0.008em;
   color: #fff;
   text-wrap: balance;
 }
@@ -357,9 +403,9 @@
   /* One shared size across all ten words, scaled down as a set when the
      longest word would not fit. Words never wrap and never resize apart. */
   font-size: calc(var(--word-size) * var(--word-scale));
-  font-weight: 400;
+  font-weight: 300;
   line-height: 1.05;
-  letter-spacing: 0.01em;
+  letter-spacing: 0.018em;
   white-space: nowrap;
   color: #fff;
   text-shadow: var(--word-glow, none);
@@ -369,7 +415,9 @@
   display: block;
   font-family: var(--font-display);
   font-size: var(--size-translation);
+  font-weight: 300;
   line-height: 1.3;
+  letter-spacing: 0.14em;
   color: #fff;
   text-shadow: var(--word-glow, none);
 }
@@ -386,8 +434,8 @@
   white-space: nowrap;
   font-family: var(--font-display);
   font-size: var(--word-size);
-  font-weight: 400;
-  letter-spacing: 0.01em;
+  font-weight: 300;
+  letter-spacing: 0.018em;
 }
 
 /* ── Scene 4B: the final D ──────────────────────────────────────────────── */
@@ -406,8 +454,9 @@
   margin: 0;
   font-family: var(--font-display);
   font-size: calc(var(--word-size) * var(--word-scale));
-  font-weight: 400;
+  font-weight: 300;
   line-height: 1.05;
+  letter-spacing: 0.018em;
   white-space: nowrap;
   color: #fff;
 }
@@ -423,8 +472,9 @@
 .d-final__festival {
   margin: 0;
   font-family: var(--font-display);
-  font-size: clamp(16px, 1.4vw + 11px, 28px);
-  letter-spacing: 0.34em;
+  font-weight: 400;
+  font-size: clamp(15px, 1.2vw + 10px, 24px);
+  letter-spacing: 0.42em;
   text-indent: 0.34em;
   color: #fff;
   opacity: 0;
@@ -480,8 +530,10 @@
   min-width: 44px;
   padding: 11px 22px;
   font-family: var(--font-ui);
+  font-weight: 400;
   font-size: var(--size-control);
   line-height: 1.2;
+  letter-spacing: 0.1em;
   color: #fff;
   /* Transparent black fill, white border. No gold anywhere. */
   background: rgb(0 0 0 / 0.38);
@@ -585,6 +637,12 @@
 /* At the threshold the homepage becomes visible behind the fading entrance.
    The root keeps pointer events, so the preview stays non-interactive and the
    homepage can never be activated while the pointer is still held. */
+/* The travelling media layer is positioned against the viewport during a zoom,
+   so the root must stop clipping it. */
+.d-entrance[data-zooming='true'] {
+  overflow: visible;
+}
+
 .d-entrance[data-preview='true'] {
   opacity: 0.18;
   transition: opacity 150ms ease;
@@ -658,4 +716,38 @@
   clip-path: inset(50%);
   white-space: nowrap;
   border: 0;
+}
+
+/* ── Script-specific families ───────────────────────────────────────────────
+
+   The Latin variable from next/font already ends in a generic `serif`, so
+   appending the Chinese families after it would place them behind a family that
+   usually HAS Chinese glyphs, and the subsets would never be reached. Chinese
+   is therefore selected by the element's own `lang`, which every localized node
+   already carries, and placed FIRST in its own stack.
+
+   Specificity is (0,2,0), so these beat the (0,1,0) component rules that set
+   `--font-display`, and they are last in the file. */
+
+.d-entrance :lang(zh-Hant),
+#site-root :lang(zh-Hant) {
+  font-family: 'Noto Serif HK', 'Noto Serif SC', var(--font-display-latin);
+}
+
+.d-entrance :lang(zh-Hans),
+#site-root :lang(zh-Hans) {
+  font-family: 'Noto Serif SC', 'Noto Serif HK', var(--font-display-latin);
+}
+
+/* English keeps the Latin display face even inside a Chinese page. */
+.d-entrance :lang(en),
+#site-root :lang(en) {
+  font-family: var(--font-display-latin), Georgia, serif;
+}
+
+/* Controls use the geometric sans for Latin. Chinese labels stay in the Song
+   serif, since no Chinese sans is subset for this site. */
+.d-entrance .d-button:lang(en),
+#site-root .site-footer__replay:lang(en) {
+  font-family: var(--font-ui);
 }

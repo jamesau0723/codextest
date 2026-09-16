@@ -16,12 +16,13 @@ export function FinalD({
   locale,
   clock,
   reducedMotion,
-  onEnter
+  onSettled
 }: {
   locale: Locale;
   clock: SceneClock;
   reducedMotion: boolean;
-  onEnter: () => void;
+  /** Fired once the transformation has finished and its hold has elapsed. */
+  onSettled: () => void;
 }) {
   const copy = copyFor(locale);
   const translation = wordTranslation(WORDS[WORDS.length - 1], locale);
@@ -46,9 +47,19 @@ export function FinalD({
     headingRef.current?.focus({ preventScroll: true });
   }, []);
 
+  const settled = useRef(false);
+
   useAnimationFrame(() => {
-    if (reducedMotion || awnWidth === 0) return;
+    if (awnWidth === 0) return;
     const elapsed = clock.elapsed;
+
+    // The entrance completes on its own: no Enter control, no press required.
+    if (!settled.current && elapsed >= TIMING.finalDissolve + TIMING.finalReveal + TIMING.finalHold) {
+      settled.current = true;
+      onSettled();
+    }
+
+    if (reducedMotion) return;
     const dissolve = Math.min(1, elapsed / TIMING.finalDissolve);
     const reveal = Math.min(
       1,
@@ -90,15 +101,6 @@ export function FinalD({
             {copy.festival}
           </motion.p>
         </div>
-        <button
-          type="button"
-          className="d-button d-scene__advance"
-          data-action="enter"
-          lang={copy.htmlLang}
-          onClick={onEnter}
-        >
-          {copy.enter}
-        </button>
       </div>
     </motion.section>
   );

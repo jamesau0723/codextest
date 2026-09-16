@@ -29,7 +29,12 @@ export type Scene = 'LANGUAGE' | 'QUESTION_1' | 'QUESTION_2' | 'WORDS' | 'FINAL_
 export type DFestivalEntranceProps = {
   initialLocale: Locale;
   onLocaleChange?: (locale: Locale) => void;
-  onExit: (outcome: Outcome) => void;
+  /**
+   * `zoom` asks the gate to carry the footage down into the homepage hero
+   * before the entrance is torn down; it resolves when that move is finished.
+   */
+  onExit: (outcome: Outcome, transition: 'fade' | 'zoom') => void;
+  zoomToHome: () => Promise<void>;
   /**
    * The media layer is created and owned by the gate, not by the entrance, so
    * a still-playing video can outlive the entrance and be handed to the
@@ -45,6 +50,7 @@ export function DFestivalEntrance({
   initialLocale,
   onLocaleChange,
   onExit,
+  zoomToHome,
   mediaLayer,
   videoRef,
   mediaState,
@@ -56,6 +62,7 @@ export function DFestivalEntrance({
   const [locale, setLocale] = useState<Locale>(initialLocale);
   const [scene, setScene] = useState<Scene>('LANGUAGE');
   const [exiting, setExiting] = useState(false);
+  const [zooming, setZooming] = useState(false);
   const [preview, setPreview] = useState(false);
   const [holdProgress, setHoldProgress] = useState(0);
 
@@ -97,10 +104,27 @@ export function DFestivalEntrance({
       setPreview(false);
       writeOutcome(outcome);
       const duration = outcome === 'completed' ? TIMING.exitNormal : TIMING.exitSkip;
-      setTimeout(() => onExit(outcome), duration);
+      setTimeout(() => onExit(outcome, 'fade'), duration);
     },
     [onExit]
   );
+
+  /**
+   * The sequence finishing enters the site by itself: the text and scrim clear,
+   * and the footage keeps playing as it shrinks into the homepage hero. There
+   * is nothing to press.
+   */
+  const enterByZoom = useCallback(() => {
+    if (exitingRef.current) return;
+    exitingRef.current = true;
+    writeOutcome('completed');
+    setPreview(false);
+    setExiting(true);
+    setZooming(true);
+    // The gate owns the media layer, so it runs the move; the entrance only
+    // clears itself out of the way.
+    void zoomToHome().then(() => onExit('completed', 'zoom'));
+  }, [zoomToHome, onExit]);
 
   const hold = useHoldToSkip(
     rootRef,
@@ -181,20 +205,45 @@ export function DFestivalEntrance({
       data-media={mediaState}
       data-shape={geometry.shape}
       data-preview={String(preview)}
+      data-zooming={String(zooming)}
       data-reduced-motion={String(reducedMotion)}
       initial={{ opacity: 1 }}
-      animate={{ opacity: exiting ? 0 : preview ? 0.18 : 1 }}
+      animate={{
+        // A zoom exit keeps the root fully opaque: the footage has to stay
+        // visible while it travels. Its background clears instead, so the
+        // homepage shows around the shrinking frame.
+        opacity: zooming ? 1 : exiting ? 0 : preview ? 0.18 : 1,
+        backgroundColor: zooming ? 'rgba(0,0,0,0)' : 'rgba(0,0,0,1)'
+      }}
       transition={{
-        duration: exiting
-          ? (scene === 'FINAL_D' || scene === 'WORDS' ? TIMING.exitNormal : TIMING.exitSkip) / 1000
-          : TIMING.holdPreview / 1000,
-        ease: 'easeInOut'
+        duration: zooming
+          ? TIMING.zoomOut / 1000
+          : exiting
+            ? TIMING.exitSkip / 1000
+            : TIMING.holdPreview / 1000,
+        ease: zooming ? [0.65, 0, 0.35, 1] : 'easeInOut'
       }}
       style={{ pointerEvents: exiting ? 'none' : 'auto' }}
     >
-      <div className="d-entrance__scrim" />
+      <motion.div
+        className="d-entrance__scrim"
+        animate={{ opacity: zooming ? 0 : 1 }}
+        transition={{ duration: TIMING.zoomUiFade / 1000, ease: 'easeOut' }}
+      />
 
-      <div className="d-entrance__ui">
+      {/* Cinematic soft edge along the bottom of the footage. */}
+      <motion.div
+        className="d-entrance__filmedge"
+        aria-hidden="true"
+        animate={{ opacity: zooming ? 0 : 1 }}
+        transition={{ duration: TIMING.zoomUiFade / 1000, ease: 'easeOut' }}
+      />
+
+      <motion.div
+        className="d-entrance__ui"
+        animate={{ opacity: zooming ? 0 : 1 }}
+        transition={{ duration: TIMING.zoomUiFade / 1000, ease: 'easeOut' }}
+      >
         <div className="d-entrance__content" ref={scrollerRef}>
           <AnimatePresence mode="wait" initial={false}>
             {scene === 'LANGUAGE' && (
@@ -225,7 +274,6 @@ export function DFestivalEntrance({
                   locale={locale}
                   clock={clockRef.current}
                   onFinished={() => goTo('FINAL_D')}
-                  onEnter={() => commitExit('completed')}
                 />
               ))}
 
@@ -235,7 +283,7 @@ export function DFestivalEntrance({
                 locale={locale}
                 clock={clockRef.current}
                 reducedMotion={reducedMotion}
-                onEnter={() => commitExit('completed')}
+                onSettled={enterByZoom}
               />
             )}
           </AnimatePresence>
@@ -252,7 +300,7 @@ export function DFestivalEntrance({
           progress={holdProgress}
           reducedMotion={reducedMotion}
         />
-      </div>
+      </motion.div>
     </motion.div>
   );
 }

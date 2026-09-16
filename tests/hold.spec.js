@@ -308,12 +308,11 @@ test('exit routes still work from every scene', async ({ page }) => {
   await page.mouse.up();
   await expect(page.locator('.d-entrance')).toHaveCount(0, { timeout: 3000 });
 
-  // Word passage, via Enter D.
+  // Word passage: it finishes and enters on its own, with nothing pressed.
   await resetEntranceState(page);
   await openEntrance(page);
   await reachWords(page, 'en');
-  await page.locator('[data-action="enter"]').click();
-  await expect(page.locator('.d-entrance')).toHaveCount(0, { timeout: 3000 });
+  await expect(page.locator('.d-entrance')).toHaveCount(0, { timeout: 25_000 });
   expect(await page.evaluate(() => localStorage.getItem('dFestival.entranceOutcome'))).toBe('completed');
 
   // Media-failure mode, via Escape.

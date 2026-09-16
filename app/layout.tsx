@@ -1,4 +1,6 @@
 import type { Metadata, Viewport } from 'next';
+import { displayLatin, ui } from './fonts';
+import './fonts-cjk.css';
 import './site.css';
 import './entrance.css';
 
@@ -19,7 +21,11 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" data-locale="en">
+    <html
+      lang="en"
+      data-locale="en"
+      className={`${displayLatin.variable} ${ui.variable}`}
+    >
       <body>{children}</body>
     </html>
   );

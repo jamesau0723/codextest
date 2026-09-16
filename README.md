@@ -19,6 +19,7 @@ npm run dev          # Next.js dev server
 npm run build        # production build
 npm test             # full Playwright suite (builds, then serves)
 npm run fixtures     # regenerate synthetic test media (not production footage)
+npm run fonts        # regenerate the Chinese subsets from the source copy
 ```
 
 Next.js 16 (App Router), React 19, TypeScript, Framer Motion 13.
@@ -75,6 +76,7 @@ The browser's available content viewport defines the canvas.
 | `WordPassage` / `FinalD` | Clock-driven timelines (`useAnimationFrame`) |
 | `PerformanceBackground` | Cover geometry, session-stable source, crop alignment, failures |
 | `HoldFeedback` | Hold ring and the transient hint |
+| `app/fonts.ts` | Latin faces via next/font; Chinese is subset by `npm run fonts` |
 | `hooks/useHoldToSkip` | One Pointer Events state machine |
 | `hooks/useEntranceViewport` | Dynamic height fallback, viewport shape |
 | `hooks/useWordFit` | One shared font size across all ten words |

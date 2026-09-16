@@ -105,7 +105,10 @@ test('rendered media has no black bars and is not distorted (1440x900)', async (
   await openEntrance(page);
   await page.locator('.d-entrance[data-media="ready"]').waitFor();
   // Measure the media itself, with the intentional scrim taken out of the way.
-  await page.addStyleTag({ content: '.d-entrance__scrim,.d-entrance__ui{opacity:0 !important}' });
+  await page.addStyleTag({
+    content:
+      '.d-entrance__scrim,.d-entrance__ui,.d-entrance__filmedge{opacity:0 !important;backdrop-filter:none !important}'
+  });
   await page.waitForTimeout(250);
 
   const image = decodePng(await page.screenshot());
@@ -136,7 +139,10 @@ test('landscape master fills phone portrait with a side crop, not a letterbox', 
   await page.setViewportSize({ width: 390, height: 844 });
   await openEntrance(page);
   await page.locator('.d-entrance[data-media="ready"]').waitFor();
-  await page.addStyleTag({ content: '.d-entrance__scrim,.d-entrance__ui{opacity:0 !important}' });
+  await page.addStyleTag({
+    content:
+      '.d-entrance__scrim,.d-entrance__ui,.d-entrance__filmedge{opacity:0 !important;backdrop-filter:none !important}'
+  });
   await page.waitForTimeout(250);
 
   const image = decodePng(await page.screenshot());

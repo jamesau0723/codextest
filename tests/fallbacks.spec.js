@@ -146,8 +146,8 @@ test('Replay reopens the entrance without changing the saved outcome', async ({ 
   await page.locator('[data-action="advance"]').first().click();
   await page.locator('[data-scene="question2"] [data-action="advance"]').click();
   await page.locator('[data-scene="words"]').waitFor();
-  await page.locator('[data-action="enter"]').click();
-  await expect(page.locator('.d-entrance')).toHaveCount(0, { timeout: 3000 });
+  // The sequence completes and enters on its own.
+  await expect(page.locator('.d-entrance')).toHaveCount(0, { timeout: 25_000 });
   expect(await page.evaluate(() => localStorage.getItem('dFestival.entranceOutcome'))).toBe('completed');
 
   const replay = page.locator('[data-action="replay-entrance"]');
@@ -264,8 +264,8 @@ test('normal entry hands a playing video to the homepage without restarting it',
   const before = await page.evaluate(() => document.querySelector('.d-entrance__video').currentTime);
   expect(before).toBeGreaterThan(0.2);
 
-  await page.locator('[data-action="enter"]').click();
-  await expect(page.locator('.d-entrance')).toHaveCount(0, { timeout: 4000 });
+  // No press: the sequence finishes and zooms the footage into the hero.
+  await expect(page.locator('.d-entrance')).toHaveCount(0, { timeout: 25_000 });
 
   const after = await page.evaluate(() => {
     const video = document.querySelector('.site-hero video');

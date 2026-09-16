@@ -24,13 +24,11 @@ import type { SceneClock } from './lib/clock';
 export function WordPassage({
   locale,
   clock,
-  onFinished,
-  onEnter
+  onFinished
 }: {
   locale: Locale;
   clock: SceneClock;
   onFinished: () => void;
-  onEnter: () => void;
 }) {
   const copy = copyFor(locale);
   const [index, setIndex] = useState(0);
@@ -126,16 +124,6 @@ export function WordPassage({
             })}
           </ol>
         </div>
-
-        <button
-          type="button"
-          className="d-button d-scene__advance"
-          data-action="enter"
-          lang={copy.htmlLang}
-          onClick={onEnter}
-        >
-          {copy.enter}
-        </button>
       </div>
     </motion.section>
   );

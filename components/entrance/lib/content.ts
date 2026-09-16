@@ -134,6 +134,12 @@ export const TIMING = {
   wordsTotal: 12200,
   finalDissolve: 350,
   finalReveal: 250,
+  /** How long the finished D FESTIVAL composition holds before entering. */
+  finalHold: 1100,
+  /** The zoom that carries the footage down into the homepage hero. */
+  zoomOut: 1500,
+  /** Text and scrim clear early, so the zoom reads as one uninterrupted move. */
+  zoomUiFade: 520,
   exitNormal: 450,
   exitSkip: 150,
   holdThreshold: 1500,

@@ -82,6 +82,28 @@ test('capture Simplified Chinese word pairing at 1440x900', async ({ page }) => 
   await page.screenshot({ path: `${OUT}/1440x900-zh-Hans-word-with-translation.png` });
 });
 
+test('capture the automatic zoom into the homepage', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openEntrance(page);
+  await page.locator('.d-entrance[data-media="ready"]').waitFor();
+  await reachWords(page, 'en');
+  await page.locator('[data-scene="final"]').waitFor({ timeout: 20_000 });
+  await page.waitForTimeout(700);
+  await page.screenshot({ path: `${OUT}/zoom-1-final-frame.png` });
+
+  await expect
+    .poll(async () => page.locator('.d-entrance').getAttribute('data-zooming'), { timeout: 6000 })
+    .toBe('true');
+  await page.waitForTimeout(420);
+  await page.screenshot({ path: `${OUT}/zoom-2-in-flight.png` });
+  await page.waitForTimeout(500);
+  await page.screenshot({ path: `${OUT}/zoom-3-nearly-home.png` });
+
+  await expect(page.locator('.d-entrance')).toHaveCount(0, { timeout: 8000 });
+  await page.waitForTimeout(250);
+  await page.screenshot({ path: `${OUT}/zoom-4-homepage.png` });
+});
+
 test('capture a portrait-to-landscape rotation without restarting', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await openEntrance(page);
@@ -108,7 +130,8 @@ test('capture the crop previews per viewport shape', async ({ page }) => {
     await openEntrance(page);
     await page.locator('.d-entrance[data-media="ready"]').waitFor();
     await page.addStyleTag({
-      content: '.d-entrance__scrim,.d-entrance__ui{opacity:0 !important}'
+      content:
+        '.d-entrance__scrim,.d-entrance__ui,.d-entrance__filmedge{opacity:0 !important;backdrop-filter:none !important}'
     });
     await page.waitForTimeout(300);
     await page.screenshot({ path: `${OUT}/crop-preview-${shape.name}.png` });

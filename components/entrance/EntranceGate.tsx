@@ -16,7 +16,7 @@ import { EntrancePortal } from './DFestivalEntrance';
 import { PerformanceBackground, type MediaState } from './PerformanceBackground';
 import { resolveProvisionalLocale } from './lib/locale';
 import { readLocale, readOutcome, type Outcome } from './lib/storage';
-import { DEFAULT_LOCALE, type Locale } from './lib/content';
+import { DEFAULT_LOCALE, TIMING, type Locale } from './lib/content';
 import {
   mediaFromOverride,
   viewportShape,
@@ -122,13 +122,70 @@ export function EntranceGate({ eligible = false, media, onLocaleChange }: Entran
     };
   }, [resolved]);
 
+  const heroHost = () =>
+    document.querySelector<HTMLElement>('[data-reuses-entrance-video]');
+
+  /**
+   * Carry the footage from full viewport down into the homepage hero.
+   *
+   * The layout box is animated rather than a transform: `object-fit: cover`
+   * then re-solves on every frame, so the footage is never scaled unevenly on
+   * the way down. A transform would be cheaper and would squash it.
+   *
+   * Resolves either way — a missing hero, an unplayable video or reduced
+   * motion all fall back to the ordinary fade, and never strand the entrance.
+   */
+  const zoomToHome = useCallback(async () => {
+    const host = heroHost();
+    const layer = mediaLayer;
+    const video = videoRef.current;
+    if (!host || !layer || reducedMotion || !video || video.readyState < 2) return;
+
+    // The entrance locked body scroll; releasing it first lets the hero be
+    // brought into view, which matters when the page is taller than the fold.
+    document.body.style.overflow = '';
+    host.scrollIntoView({ block: 'center', behavior: 'instant' as ScrollBehavior });
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+
+    const from = layer.getBoundingClientRect();
+    const to = host.getBoundingClientRect();
+    if (to.width < 1 || to.height < 1) return;
+
+    Object.assign(layer.style, {
+      position: 'fixed',
+      top: `${from.top}px`,
+      left: `${from.left}px`,
+      width: `${from.width}px`,
+      height: `${from.height}px`,
+      zIndex: '1001',
+      borderRadius: '0px'
+    });
+
+    const animation = layer.animate(
+      [
+        { top: `${from.top}px`, left: `${from.left}px`,
+          width: `${from.width}px`, height: `${from.height}px` },
+        { top: `${to.top}px`, left: `${to.left}px`,
+          width: `${to.width}px`, height: `${to.height}px` }
+      ],
+      { duration: TIMING.zoomOut, easing: 'cubic-bezier(0.65, 0, 0.35, 1)', fill: 'forwards' }
+    );
+
+    await animation.finished.catch(() => {
+      /* an interrupted animation still lands in the hero below */
+    });
+  }, [mediaLayer, reducedMotion, videoRef]);
+
   const handleExit = useCallback(
-    (outcome: Outcome) => {
+    (outcome: Outcome, transition: 'fade' | 'zoom' = 'fade') => {
       // Hand the still-playing element to a homepage that reuses it, rather
       // than destroying and recreating it.
-      const host = document.querySelector('[data-reuses-entrance-video]');
+      const host = heroHost();
       const video = videoRef.current;
       if (mediaLayer && host && video && !video.paused && video.readyState >= 2) {
+        // Clear the inline geometry the zoom left behind; the hero's own box
+        // takes over from here.
+        mediaLayer.removeAttribute('style');
         mediaLayer.className = 'd-media-layer d-media-layer--hero';
         host.appendChild(mediaLayer);
         setHandedOver(true);
@@ -137,6 +194,7 @@ export function EntranceGate({ eligible = false, media, onLocaleChange }: Entran
         setHandedOver(false);
       }
 
+      void transition;
       setOpen(false);
       document.documentElement.dataset.entrance = outcome;
       if (replayTrigger && document.contains(replayTrigger)) {
@@ -152,7 +210,7 @@ export function EntranceGate({ eligible = false, media, onLocaleChange }: Entran
         }
       }
     },
-    [replayTrigger, mediaLayer]
+    [replayTrigger, mediaLayer, videoRef]
   );
 
   // Rendered into the persistent layer, so it survives the entrance closing.
@@ -179,6 +237,7 @@ export function EntranceGate({ eligible = false, media, onLocaleChange }: Entran
           initialLocale={locale}
           mediaLayer={mediaLayer}
           videoRef={videoRef}
+          zoomToHome={zoomToHome}
           mediaState={mediaState}
           onShapeChange={setShape}
           onLocaleChange={(next) => {
