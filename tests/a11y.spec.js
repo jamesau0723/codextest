@@ -141,7 +141,12 @@ test('each scene moves focus to its heading, and words do not steal focus', asyn
   expect(await page.evaluate(() => document.activeElement?.className)).toContain('d-scene__heading');
 
   await page.locator('.d-language__option[data-locale="en"]').click();
-  expect(await page.evaluate(() => document.activeElement?.className)).toContain('d-scene__question');
+  // Focus moves when the next scene mounts, after the scene transition.
+  await expect
+    .poll(async () => page.evaluate(() => document.activeElement?.className ?? ''), {
+      timeout: 3000
+    })
+    .toContain('d-scene__question');
   // Focusing the heading must not scroll the scrub track away from the top.
   expect(await page.evaluate(
     () => document.querySelector('.d-entrance__content').scrollTop
@@ -162,6 +167,7 @@ test('each scene moves focus to its heading, and words do not steal focus', asyn
 test('assistive technology gets whole questions and one stable word list', async ({ page }) => {
   await openEntrance(page);
   await page.locator('.d-language__option[data-locale="zh-Hans"]').click();
+  await page.locator('[data-scene="question1"]').waitFor();
 
   // The per-grapheme layer is hidden from assistive technology; the complete
   // question is exposed once.
@@ -246,7 +252,7 @@ test('white text keeps at least 4.5:1 against the composited brightest frame', a
   await page.setViewportSize({ width: 1280, height: 800 });
   // Worst case for a dark scrim: a pure white background frame.
   await openEntrance(page, {
-    media: { master: { src: null, poster: '/tests/fixtures/white.png', width: 8, height: 8 } }
+    media: { master: { src: null, poster: '/fixtures/white.png', width: 8, height: 8 } }
   });
   await page.waitForTimeout(400);
 

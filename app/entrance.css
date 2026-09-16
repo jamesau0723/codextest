@@ -84,6 +84,24 @@
   box-sizing: border-box;
 }
 
+/* The media layer is a plain DOM node owned above the entrance, so a playing
+   video can be handed to the homepage without being destroyed and recreated.
+   It is the entrance's base layer while the entrance is open, and becomes the
+   hero's background afterwards. */
+.d-media-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.d-media-layer--hero {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
 /* ── Media layers ───────────────────────────────────────────────────────────
    Video and poster occupy the identical rectangle and share one crop
    alignment. Intrinsic media dimensions never determine layout height. */
@@ -158,8 +176,6 @@
   width: 100%;
   /* Symmetric, so reserving room for the controls never moves the centre. */
   padding-block: var(--content-reserve);
-  opacity: 1;
-  transition: opacity 250ms ease;
   text-align: center;
 }
 
@@ -189,9 +205,6 @@
      hint and hold ring. */
   padding-block: var(--content-reserve);
 }
-
-.d-scene.is-entering { opacity: 0; }
-.d-scene.is-leaving { opacity: 0; pointer-events: none; }
 
 .d-scene__main {
   position: relative;
@@ -280,9 +293,18 @@
    position IS the animation. */
 .d-reveal__w {
   display: inline-block;
+  /* The unrevealed resting state. Framer Motion writes inline opacity and
+     filter from scroll progress; these values are what shows before hydration
+     and what reduced motion overrides below. */
   opacity: 0.2;
   filter: blur(4px);
   will-change: opacity, filter;
+}
+
+.d-reveal__w--static {
+  opacity: 1;
+  filter: none;
+  will-change: auto;
 }
 
 /* Scroll affordance, in the eyebrow position above the question. */

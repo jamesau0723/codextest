@@ -1,20 +1,39 @@
 /**
- * EntranceContentData
- * Translations, word order and timings, separated from rendering.
+ * Entrance copy, word order and timings — plain data, no React.
  * Spec v2.0 sections 3 and 5.
  */
 
-export const LOCALES = ['en', 'zh-Hant', 'zh-Hans'];
-export const DEFAULT_LOCALE = 'en';
+export const LOCALES = ['en', 'zh-Hant', 'zh-Hans'] as const;
+export type Locale = (typeof LOCALES)[number];
+export const DEFAULT_LOCALE: Locale = 'en';
 
-/** Native spelling of each choice. Order is fixed; all choices have equal weight. */
-export const LANGUAGE_CHOICES = [
+export type LanguageChoice = { locale: Locale; label: string; lang: string };
+
+/** Native spelling of each choice. All options carry equal default weight. */
+export const LANGUAGE_CHOICES: LanguageChoice[] = [
   { locale: 'zh-Hant', label: '繁體中文', lang: 'zh-Hant' },
   { locale: 'zh-Hans', label: '简体中文', lang: 'zh-Hans' },
   { locale: 'en', label: 'English', lang: 'en' }
 ];
 
-export const COPY = {
+export type Copy = {
+  htmlLang: string;
+  languageHeading: string;
+  question1: string;
+  question2: string;
+  continue: string;
+  enter: string;
+  scrollCue: string;
+  holdHint: string;
+  holdProgress: string;
+  holdThreshold: string;
+  replay: string;
+  wordListLabel: string;
+  entranceLabel: string;
+  festival: string;
+};
+
+export const COPY: Record<Locale, Copy> = {
   en: {
     htmlLang: 'en',
     languageHeading: 'Choose your language',
@@ -26,10 +45,6 @@ export const COPY = {
     holdHint: 'Hold anywhere for 1.5s to skip',
     holdProgress: 'Keep holding to skip',
     holdThreshold: 'Release to enter',
-    // Retained for reference only: the pause/resume control was removed at the
-    // client's request. See docs/HANDOFF.md section 7.
-    pause: 'Pause motion',
-    resume: 'Resume motion',
     replay: 'Replay entrance',
     wordListLabel: 'Ten words of D',
     entranceLabel: 'D Festival entrance',
@@ -46,8 +61,6 @@ export const COPY = {
     holdHint: '長按任意位置 1.5 秒即可略過',
     holdProgress: '繼續長按即可略過',
     holdThreshold: '放開即可進入',
-    pause: '暫停動畫',
-    resume: '繼續播放',
     replay: '重播開場',
     wordListLabel: 'D 的十個詞',
     entranceLabel: 'D Festival 開場',
@@ -64,8 +77,6 @@ export const COPY = {
     holdHint: '长按任意位置 1.5 秒即可跳过',
     holdProgress: '继续长按即可跳过',
     holdThreshold: '松开即可进入',
-    pause: '暂停动画',
-    resume: '继续播放',
     replay: '重播开场',
     wordListLabel: 'D 的十个词',
     entranceLabel: 'D Festival 开场',
@@ -73,12 +84,20 @@ export const COPY = {
   }
 };
 
+export type DWord = {
+  en: string;
+  'zh-Hant': string;
+  'zh-Hans': string;
+  start: number;
+  end: number;
+};
+
 /**
- * The ten D-words. English is shown in every locale so the shared initial is
+ * The ten D-words. English shows in every locale so the shared initial is
  * apparent; Chinese locales add the translation underneath.
- * Timeline values are milliseconds from the start of the word passage.
+ * Timeline values are milliseconds from the start of the passage.
  */
-export const WORDS = [
+export const WORDS: DWord[] = [
   { en: 'Doubt',       'zh-Hant': '質疑', 'zh-Hans': '质疑', start: 0,     end: 1200 },
   { en: 'Desire',      'zh-Hant': '渴望', 'zh-Hans': '渴望', start: 1200,  end: 2400 },
   { en: 'Discipline',  'zh-Hant': '自律', 'zh-Hans': '自律', start: 2400,  end: 3600 },
@@ -99,12 +118,10 @@ export const LONGEST_WORD = WORDS.reduce(
 
 export const TIMING = {
   sceneTransition: 250,
-  languageAppear: 200,
   /**
    * Scroll-scrub reveal. `scrubWindow` is the share of total scroll progress
-   * over which any single word travels from unrevealed to revealed; the
-   * remainder is spread across the words as staggered start points. A wider
-   * window overlaps more words at once and reads smoother.
+   * over which a single word travels from unrevealed to revealed; the rest is
+   * spread across the words as staggered start points.
    */
   scrubWindow: 0.35,
   revealOpacityFrom: 0.2,
@@ -113,9 +130,7 @@ export const TIMING = {
   hintVisible: 2000,
   hintFade: 400,
   wordReveal: 200,
-  wordHold: 800,
   wordDisappear: 200,
-  dawnHold: 1200,
   wordsTotal: 12200,
   finalDissolve: 350,
   finalReveal: 250,
@@ -123,14 +138,15 @@ export const TIMING = {
   exitSkip: 150,
   holdThreshold: 1500,
   holdIndicatorDelay: 150,
+  /** Homepage preview reveal once the hold threshold is reached. */
   holdPreview: 150,
   holdTolerancePx: 12
-};
+} as const;
 
-export function copyFor(locale) {
-  return COPY[locale] || COPY[DEFAULT_LOCALE];
+export function copyFor(locale: Locale): Copy {
+  return COPY[locale] ?? COPY[DEFAULT_LOCALE];
 }
 
-export function wordTranslation(word, locale) {
+export function wordTranslation(word: DWord, locale: Locale): string | null {
   return locale === 'en' ? null : word[locale] || null;
 }

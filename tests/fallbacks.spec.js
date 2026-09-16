@@ -8,8 +8,8 @@ test('a media error shows the poster with every control working', async ({ page 
   await openEntrance(page, {
     media: {
       master: {
-        src: '/tests/fixtures/does-not-exist.webm',
-        poster: '/tests/fixtures/landscape-16x9.png',
+        src: '/fixtures/does-not-exist.webm',
+        poster: '/fixtures/landscape-16x9.png',
         width: 1280,
         height: 720
       }
@@ -33,8 +33,8 @@ test('video and poster both failing gives full-screen black with white UI', asyn
   await openEntrance(page, {
     media: {
       master: {
-        src: '/tests/fixtures/does-not-exist.webm',
-        poster: '/tests/fixtures/also-missing.png'
+        src: '/fixtures/does-not-exist.webm',
+        poster: '/fixtures/also-missing.png'
       }
     }
   });
@@ -132,11 +132,11 @@ test('a returning visitor bypasses the entrance', async ({ page }) => {
 
 test('deep links open their target and never show the entrance', async ({ page }) => {
   await page.addInitScript(() => { try { localStorage.clear(); } catch {} });
-  await page.goto('/programme.html#faculty');
+  await page.goto('/programme#faculty');
   await page.waitForTimeout(400);
 
   expect(await page.locator('.d-entrance').count()).toBe(0);
-  expect(page.url()).toContain('/programme.html#faculty');
+  expect(page.url()).toContain('/programme#faculty');
   await expect(page.locator('#faculty')).toBeVisible();
 });
 
@@ -179,25 +179,25 @@ test('a supported URL locale takes priority over a stored language', async ({ pa
   await expect(page.locator('.d-scene__heading')).toHaveText('選擇語言');
 });
 
-test('the homepage stays usable when the entrance script fails', async ({ page }) => {
-  // Block the entrance module entirely — the site must still work.
-  await page.route('**/src/site/main.js', (route) => route.abort());
-  await page.goto('/index.html');
-  await page.waitForLoadState('domcontentloaded');
+test('the server-rendered HTML carries the site and no entrance', async ({ request }) => {
+  // The homepage is a server component, so its markup does not depend on the
+  // entrance bundle loading at all.
+  const response = await request.get('/');
+  expect(response.ok()).toBe(true);
+  const html = await response.text();
 
-  expect(await page.locator('.d-entrance').count()).toBe(0);
-  await expect(page.locator('#main-content')).toBeVisible();
-  await expect(page.locator('.site-header__brand')).toBeVisible();
-  // Language links work without JavaScript.
-  await expect(page.locator('.site-footer__langs a')).toHaveCount(3);
-  // Nothing locked the page scroll.
-  expect(await page.evaluate(() => document.body.style.overflow)).toBe('');
+  expect(html).toContain('id="main-content"');
+  expect(html).toContain('id="site-root"');
+  // React emits a literal U+00A0, not the HTML entity.
+  expect(html).toContain('D\u00a0FESTIVAL');
+  // The entrance is client-only: it must not be in the server HTML.
+  expect(html).not.toContain('d-entrance');
 });
 
 test('with JavaScript disabled the site renders and the entrance does not', async ({ browser }) => {
   const context = await browser.newContext({ javaScriptEnabled: false });
   const page = await context.newPage();
-  await page.goto('/index.html');
+  await page.goto('/');
 
   expect(await page.locator('.d-entrance').count()).toBe(0);
   await expect(page.locator('#main-content')).toBeVisible();

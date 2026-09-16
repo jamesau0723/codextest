@@ -3,9 +3,9 @@ import { expect } from '@playwright/test';
 /** Fixture media, passed through the documented test seam. */
 export const FIXTURE_MEDIA = {
   master: {
-    src: '/tests/fixtures/landscape-16x9.webm',
+    src: '/fixtures/landscape-16x9.webm',
     type: 'video/webm',
-    poster: '/tests/fixtures/landscape-16x9.png',
+    poster: '/fixtures/landscape-16x9.png',
     width: 1280,
     height: 720
   }
@@ -16,7 +16,7 @@ export const NO_MEDIA = { master: { src: null, poster: null } };
 export function entranceUrl(media = FIXTURE_MEDIA, extra = '') {
   const query = media === null ? '' : `media=${encodeURIComponent(JSON.stringify(media))}`;
   const parts = [query, extra].filter(Boolean).join('&');
-  return `/index.html${parts ? `?${parts}` : ''}`;
+  return `/${parts ? `?${parts}` : ''}`;
 }
 
 /**

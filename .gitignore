@@ -4,3 +4,6 @@ playwright-report/
 .playwright/
 *.log
 .DS_Store
+.next/
+next-env.d.ts
+tsconfig.tsbuildinfo

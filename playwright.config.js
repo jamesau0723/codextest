@@ -30,9 +30,13 @@ export default defineConfig({
     }
   ],
   webServer: {
-    command: `node tools/serve.js`,
-    url: `http://127.0.0.1:${PORT}/index.html`,
-    reuseExistingServer: !process.env.CI,
-    env: { PORT: String(PORT) }
+    // Production build, not `next dev`: dev mode's Strict Mode double-effects
+    // and Fast Refresh overlay are not what ships.
+    command: `npx next build && npx next start --port ${PORT}`,
+    url: `http://127.0.0.1:${PORT}/`,
+    // Never reuse: a server started before a rebuild keeps serving the old
+    // chunk manifest, so every script 404s and the app silently never hydrates.
+    reuseExistingServer: false,
+    timeout: 180_000
   }
 });

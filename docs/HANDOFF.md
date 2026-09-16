@@ -69,7 +69,7 @@ the spec and assumes the build matches it.
 
 | # | Change | Spec it departs from | Consequence |
 |---|---|---|---|
-| A | Typewriter questions replaced by a **scroll-scrubbed word reveal** | §2 (1,000 ms typing), §3 | Reading the question now requires scrolling |
+| A | Typewriter questions replaced by a **scroll-scrubbed word reveal**, in Framer Motion | §2 (1,000 ms typing), §3 | Reading the question now requires scrolling |
 | B | **Skip control removed** (top right) | §2, §5, §8, acceptance 10 | One of four exit routes is gone |
 | C | **Pause/resume control removed** (bottom left) | §5, acceptance 18 | See the accessibility note below |
 | D | Hold hint made **transient** — appears after the language choice, holds 2 s, fades | §5 (persistent hint) | The remaining shortcut is advertised only briefly |
@@ -95,6 +95,23 @@ complete path out, just a slower one. Nobody is stuck.
 Neither change was blocked, because neither makes the entrance unusable and
 both are the client's call. They are flagged, not overridden.
 
+### React-specific notes
+
+- **Scene transitions** use `AnimatePresence mode="wait"`, so two scenes are
+  never in the same grid cell at once. The cost is that focus briefly falls to
+  `body` during the 250 ms gap before the next scene's heading takes it.
+- **The media element is owned by `EntranceGate`, not the entrance**, and lives
+  in a plain DOM layer that the entrance adopts while open. That is what lets a
+  playing video be handed to the homepage on entry instead of being unmounted
+  and recreated — React would otherwise destroy it with the entrance subtree.
+- **The homepage is a server component**, so its markup is in the HTML with or
+  without JavaScript. The `?media=` test seam is read client-side inside the
+  gate; reading it with `useSearchParams` at page level would have forced the
+  entire page to render client-only.
+- **Per-frame work avoids React re-renders**: the word passage and the final
+  transformation write to motion values inside `useAnimationFrame`, so React
+  renders ten times across the passage rather than sixty times a second.
+
 ### How the scroll reveal preserves the centring rule
 
 The spec requires the question centred at x=50%, y=50% of the viewport. A
@@ -114,15 +131,38 @@ Chinese is segmented with `Intl.Segmenter` at word granularity, so it reveals
 音樂 / 打動 as units rather than one character at a time; punctuation rides with
 the word before it.
 
-### Stack note
+### Stack: ported to Next.js, React and Framer Motion
 
-The supplied prompt specified Next.js, React and Framer Motion
-(`useScroll`/`useTransform`). This project is vanilla ES modules with no React,
-and spec §10 forbids adding an application framework for the entrance. The
-described effect was therefore built on the existing shared
-`requestAnimationFrame` loop, which reads `scrollTop` and writes the two
-properties directly — the same result Framer Motion's scroll transforms
-produce, without the dependency.
+The entrance was first built vanilla, because the repository was empty and spec
+§10 forbids adding an application framework for the entrance alone. The client
+then confirmed the updated D Festival website will be **Next.js + React**, which
+makes React the destination rather than an addition, so the whole entrance was
+ported. The vanilla implementation is gone; it remains in git history at
+`ff3ab39`.
+
+| Layer | Now |
+|---|---|
+| Framework | Next.js 16 (App Router), React 19, TypeScript (strict) |
+| Animation | Framer Motion 13 — `useScroll`, `useTransform`, `useAnimationFrame`, `AnimatePresence` |
+| Styling | Plain global CSS, class names unchanged from the vanilla build |
+| Entry point | `<EntranceGate eligible />` inside `components/site/SiteShell.tsx` |
+
+**Dropping it into the real site** needs three things: `components/entrance/`
+copied across, `app/entrance.css` imported once, and `<EntranceGate eligible />`
+rendered on the homepage with `#site-root` and `#main-content` present. Media
+paths go in `components/entrance/lib/mediaConfig.ts`.
+
+TypeScript was chosen because it is the Next.js default and the request asked
+for production-ready code. If the real site is plain JavaScript, stripping the
+types is mechanical — nothing depends on them at runtime.
+
+**The scroll reveal is now literally what was asked for**: `useTransform` maps
+scroll progress to each word's `opacity` and `filter`, with `useScroll`
+measuring a tall track against its sticky pin. One deviation from the obvious
+form is deliberate and commented in `ScrollRevealText.tsx`: both properties are
+derived from an explicit callback rather than a range-based `useTransform`,
+because the range form returned a value for the first word that disagreed with
+the blur computed from the same progress.
 
 ---
 

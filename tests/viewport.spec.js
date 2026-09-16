@@ -461,9 +461,9 @@ test('only one video source is requested for the entrance session', async ({ pag
     media: {
       ...FIXTURE_MEDIA,
       portrait: {
-        src: '/tests/fixtures/portrait-9x16.webm',
+        src: '/fixtures/portrait-9x16.webm',
         type: 'video/webm',
-        poster: '/tests/fixtures/portrait-9x16.png',
+        poster: '/fixtures/portrait-9x16.png',
         width: 720,
         height: 1280
       }
