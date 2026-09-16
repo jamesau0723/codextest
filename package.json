@@ -1,0 +1,17 @@
+{
+  "name": "d-festival-site",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "D Festival website with the D Festival entrance experience (spec v2.0).",
+  "scripts": {
+    "dev": "node tools/serve.js",
+    "serve": "node tools/serve.js",
+    "fixtures": "node tools/make-fixtures.mjs",
+    "test": "playwright test",
+    "test:report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.56.0"
+  }
+}

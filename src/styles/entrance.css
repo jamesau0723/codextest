@@ -1,0 +1,577 @@
+/* ===========================================================================
+   D Festival entrance — spec v2.0 section 4 and 7.
+   The browser's available content viewport defines the canvas. The video fills
+   it with object-fit: cover. No fixed page ratio, no letterboxing, no frame.
+   =========================================================================== */
+
+.d-entrance {
+  /* Crop alignment, set per viewport shape by PerformanceBackground. */
+  --video-position-x: 50%;
+  --video-position-y: 50%;
+  --overlay-alpha: 0.60;
+  --exit-duration: 450ms;
+  --word-scale: 1;
+
+  /* Safe-area insets apply to controls and text only — never to the media. */
+  --safe-t: env(safe-area-inset-top, 0px);
+  --safe-r: env(safe-area-inset-right, 0px);
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-l: env(safe-area-inset-left, 0px);
+
+  --edge-x: 24px;
+  --edge-y: 20px;
+  --control-h: 44px;
+  --foot-h: 56px;
+
+  /* Room is reserved for the top and bottom control bands BEFORE deciding
+     whether content fits. The reserve is symmetric so the content centre stays
+     at exactly 50% / 50% of the viewport. */
+  --reserve-top: calc(var(--safe-t) + var(--edge-y) + var(--control-h) + 12px);
+  --reserve-bottom: calc(var(--safe-b) + var(--edge-y) + var(--foot-h) + 56px);
+  --content-reserve: max(var(--reserve-top), var(--reserve-bottom));
+  --content-inline: calc(var(--edge-x) + max(var(--safe-l), var(--safe-r)));
+
+  --font-display: 'Source Serif 4', 'Noto Serif TC', 'Noto Serif SC', Georgia,
+    'Times New Roman', 'Songti TC', 'SimSun', serif;
+  --font-ui: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue',
+    Arial, 'Noto Sans TC', 'Noto Sans SC', sans-serif;
+
+  --size-question: clamp(28px, 4.2vw + 14px, 60px);
+  --word-size: clamp(40px, 8vw + 8px, 112px);
+  --size-translation: clamp(20px, 1.1vw + 15px, 32px);
+  --size-heading: clamp(28px, 3.2vw + 14px, 48px);
+  --size-control: clamp(15px, 0.3vw + 14px, 16px);
+  --size-hint: clamp(14px, 0.35vw + 13px, 16px);
+
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  /* Conventional fallback first; the JS legacy variable is populated only in
+     browsers without dvh, and the @supports block below wins where dvh works. */
+  height: 100vh;
+  height: var(--entrance-legacy-height, 100vh);
+  margin: 0;
+  padding: 0;
+  max-width: none;
+  border: 0;
+  border-radius: 0;
+  overflow: hidden;
+  background: #000;
+  isolation: isolate;
+  color: #fff;
+  z-index: var(--z-entrance, 1000);
+  font-family: var(--font-ui);
+}
+
+@supports (height: 100dvh) {
+  .d-entrance {
+    height: 100dvh;
+  }
+}
+
+/* ── Media layers ───────────────────────────────────────────────────────────
+   Video and poster occupy the identical rectangle and share one crop
+   alignment. Intrinsic media dimensions never determine layout height. */
+
+.d-entrance__poster,
+.d-entrance__video {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  min-width: 0;
+  object-fit: cover;
+  object-position: var(--video-position-x) var(--video-position-y);
+  pointer-events: none;
+  border: 0;
+  background: #000;
+}
+
+.d-entrance__poster { z-index: 0; }
+
+.d-entrance__video {
+  z-index: 1;
+  opacity: 0;
+  transition: opacity 240ms ease;
+}
+
+.d-entrance__poster[hidden],
+.d-entrance__video[hidden] { display: none; }
+
+/* The scrim covers the full viewport from the first render, before any media
+   metadata exists. It is a sibling of the content, never its parent. */
+.d-entrance__scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background: rgb(0 0 0 / var(--overlay-alpha));
+  pointer-events: none;
+}
+
+/* ── Foreground ─────────────────────────────────────────────────────────────
+   The UI layer keeps pointer events so hold-to-skip is received anywhere. */
+
+.d-entrance__ui {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  color: #fff;
+}
+
+.d-entrance__content {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template: 1fr / 1fr;
+  place-items: center;
+  place-items: safe center;
+  padding-block: var(--content-reserve);
+  padding-inline: var(--content-inline);
+  /* Only the foreground scrolls at short heights or high zoom; the background
+     and scrim stay full-viewport and stationary. */
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+}
+
+.d-scene {
+  grid-area: 1 / 1;
+  width: 100%;
+  opacity: 1;
+  transition: opacity 250ms ease;
+  text-align: center;
+}
+
+.d-scene.is-entering { opacity: 0; }
+.d-scene.is-leaving { opacity: 0; pointer-events: none; }
+
+.d-scene__main {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+}
+
+/* The advance control hangs below the centred group and is excluded from its
+   vertical centring, so the question stays at exactly y = 50%. */
+.d-scene__advance {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-top: 40px;
+  white-space: nowrap;
+}
+
+/* ── Scene 1: language ──────────────────────────────────────────────────── */
+
+.d-scene__heading {
+  margin: 0 0 28px;
+  font-family: var(--font-display);
+  font-size: var(--size-heading);
+  font-weight: 400;
+  line-height: 1.25;
+  color: #fff;
+}
+
+.d-scene__heading:focus-visible,
+.d-scene__question:focus-visible,
+.d-final__word:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 6px;
+}
+
+.d-language {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+/* A compact horizontal row is allowed only where labels stay well spaced. */
+@media (min-width: 700px) {
+  .d-language {
+    flex-direction: row;
+    justify-content: center;
+    gap: 20px;
+  }
+}
+
+.d-language__option {
+  min-width: 190px;
+  font-family: var(--font-display);
+  font-size: clamp(17px, 0.6vw + 15px, 20px);
+}
+
+/* ── Scenes 2 and 3: typed questions ────────────────────────────────────── */
+
+.d-scene__question {
+  position: relative;
+  margin: 0;
+  max-width: 18ch;
+  font-family: var(--font-display);
+  font-size: var(--size-question);
+  font-weight: 400;
+  line-height: 1.32;
+  color: #fff;
+  text-wrap: balance;
+}
+
+.d-scene__question:lang(zh-Hant),
+.d-scene__question:lang(zh-Hans) {
+  max-width: 15em;
+  line-break: normal;
+  word-break: normal;
+}
+
+/* Hidden graphemes keep their layout box, so the block never jumps as it
+   types and the completed text's layout is reserved from the first frame. */
+.d-type__g {
+  position: relative;
+  visibility: hidden;
+}
+
+.d-type__g.is-shown { visibility: visible; }
+
+/* A thin white caret follows the revealed text. Zero layout width, so it
+   cannot shift the characters after it or create a line-break opportunity. */
+.d-type__g.has-caret::after {
+  content: '';
+  position: absolute;
+  right: -2px;
+  top: 0.12em;
+  width: 2px;
+  height: 1em;
+  background: #fff;
+}
+
+/* ── Scene 4A: the word passage ─────────────────────────────────────────── */
+
+.d-word {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  opacity: 0;
+}
+
+.d-word__en {
+  display: block;
+  font-family: var(--font-display);
+  /* One shared size across all ten words, scaled down as a set when the
+     longest word would not fit. Words never wrap and never resize apart. */
+  font-size: calc(var(--word-size) * var(--word-scale));
+  font-weight: 400;
+  line-height: 1.05;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  color: #fff;
+  text-shadow: var(--word-glow, none);
+}
+
+.d-word__zh {
+  display: block;
+  font-family: var(--font-display);
+  font-size: var(--size-translation);
+  line-height: 1.3;
+  color: #fff;
+  text-shadow: var(--word-glow, none);
+}
+
+.d-word__zh[hidden] { display: none; }
+
+/* Measurement probe for the longest word. Never uses --word-scale. */
+.d-word__probe {
+  position: absolute;
+  top: 0;
+  left: 0;
+  visibility: hidden;
+  pointer-events: none;
+  white-space: nowrap;
+  font-family: var(--font-display);
+  font-size: var(--word-size);
+  font-weight: 400;
+  letter-spacing: 0.01em;
+}
+
+/* ── Scene 4B: the final D ──────────────────────────────────────────────── */
+
+.d-final {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.d-final__word {
+  display: flex;
+  justify-content: center;
+  align-items: baseline;
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: calc(var(--word-size) * var(--word-scale));
+  font-weight: 400;
+  line-height: 1.05;
+  white-space: nowrap;
+  color: #fff;
+}
+
+.d-final__awn { will-change: opacity, margin-right; }
+
+.d-final__zh {
+  font-family: var(--font-display);
+  font-size: var(--size-translation);
+  color: #fff;
+}
+
+.d-final__festival {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(16px, 1.4vw + 11px, 28px);
+  letter-spacing: 0.34em;
+  text-indent: 0.34em;
+  color: #fff;
+  opacity: 0;
+}
+
+/* ── Reduced-motion static word list ────────────────────────────────────── */
+
+.d-scene__main--static { gap: 20px; }
+
+.d-static-words {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px 22px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-width: 760px;
+}
+
+.d-static-words li {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.d-static-words__en {
+  font-family: var(--font-display);
+  font-size: clamp(22px, 1.6vw + 16px, 34px);
+  color: #fff;
+}
+
+.d-static-words__zh {
+  font-family: var(--font-display);
+  font-size: clamp(15px, 0.5vw + 13px, 20px);
+  color: #fff;
+}
+
+.d-scene__advance--static {
+  position: static;
+  transform: none;
+  margin-top: 8px;
+}
+
+/* ── Controls ───────────────────────────────────────────────────────────── */
+
+.d-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* Project design target: 44 x 44 CSS px minimum interactive area. */
+  min-height: 44px;
+  min-width: 44px;
+  padding: 11px 22px;
+  font-family: var(--font-ui);
+  font-size: var(--size-control);
+  line-height: 1.2;
+  color: #fff;
+  /* Transparent black fill, white border. No gold anywhere. */
+  background: rgb(0 0 0 / 0.38);
+  border: 1px solid rgb(255 255 255 / 0.85);
+  border-radius: 2px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color 160ms ease, border-color 160ms ease;
+}
+
+.d-button:hover { background: rgb(0 0 0 / 0.55); border-color: #fff; }
+
+.d-button:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 3px;
+}
+
+.d-button--compact { padding: 9px 14px; white-space: nowrap; }
+
+/* Skip keeps one fixed position in every scene and during transitions, clear
+   of notches and browser UI. It is never disabled. */
+.d-entrance__skip {
+  position: absolute;
+  top: calc(var(--safe-t) + var(--edge-y));
+  right: calc(var(--safe-r) + var(--edge-x));
+  z-index: 5;
+}
+
+.d-entrance__foot {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 5;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 0 calc(var(--safe-r) + var(--edge-x)) calc(var(--safe-b) + var(--edge-y))
+    calc(var(--safe-l) + var(--edge-x));
+}
+
+.d-entrance__pause { grid-column: 1; justify-self: start; }
+
+.d-entrance__hint {
+  grid-column: 2;
+  justify-self: center;
+  margin: 0;
+  font-size: var(--size-hint);
+  line-height: 1.35;
+  color: #fff;
+  text-align: center;
+}
+
+/* Adequate separation on small screens: the hint moves above the pause row
+   instead of crowding it. */
+@media (max-width: 560px) {
+  .d-entrance {
+    --foot-h: 96px;
+  }
+
+  .d-entrance__foot {
+    grid-template-columns: 1fr;
+    row-gap: 10px;
+  }
+
+  .d-entrance__hint { grid-row: 1; }
+  .d-entrance__pause { grid-row: 2; justify-self: start; }
+}
+
+/* Hold feedback: a fixed safe location above the bottom hint that never
+   steals pointer events from the gesture it reports on. */
+.d-entrance__hold {
+  position: absolute;
+  left: 50%;
+  bottom: calc(var(--safe-b) + var(--edge-y) + var(--foot-h) + 8px);
+  transform: translateX(-50%);
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 140ms ease;
+}
+
+.d-entrance__hold[data-state='progressing'],
+.d-entrance__hold[data-state='armed'] { opacity: 1; }
+
+.d-hold__ring { width: 32px; height: 32px; transform: rotate(-90deg); }
+
+.d-hold__track {
+  fill: none;
+  stroke: rgb(255 255 255 / 0.3);
+  stroke-width: 2;
+}
+
+.d-hold__fill {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.d-hold__label {
+  font-size: var(--size-hint);
+  color: #fff;
+  text-align: center;
+}
+
+/* ── Exit and threshold preview ─────────────────────────────────────────── */
+
+/* At the threshold the homepage becomes visible behind the fading entrance.
+   The root keeps pointer events, so the preview stays non-interactive and the
+   homepage can never be activated while the pointer is still held. */
+.d-entrance[data-preview='true'] {
+  opacity: 0.18;
+  transition: opacity 150ms ease;
+}
+
+.d-entrance.is-exiting {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--exit-duration) ease;
+}
+
+/* ── Short viewports and zoom ───────────────────────────────────────────── */
+
+/* Below this height the advance control rejoins the flow rather than
+   overlapping the hold hint. Reachable controls beat exact centring. */
+@media (max-height: 560px) {
+  .d-entrance {
+    --edge-y: 12px;
+    --reserve-bottom: calc(var(--safe-b) + var(--edge-y) + var(--foot-h) + 16px);
+  }
+
+  .d-scene__advance {
+    position: static;
+    transform: none;
+    margin-top: 22px;
+  }
+
+  .d-scene__main { padding-block: 4px; }
+}
+
+@media (min-width: 900px) {
+  .d-entrance {
+    --edge-x: 40px;
+    --edge-y: 28px;
+  }
+}
+
+/* ── Reduced motion ─────────────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  .d-entrance,
+  .d-entrance *,
+  .d-scene,
+  .d-entrance__video {
+    transition-duration: 1ms !important;
+    animation-duration: 1ms !important;
+  }
+}
+
+.d-entrance[data-reduced-motion='true'] .d-word__en,
+.d-entrance[data-reduced-motion='true'] .d-word__zh {
+  text-shadow: none;
+}
+
+/* ── Utility ────────────────────────────────────────────────────────────── */
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
