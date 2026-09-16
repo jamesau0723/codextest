@@ -2,7 +2,14 @@
  * Failure states, persistence and routing (spec 7.7, 8, 9; acceptance 24–27, 40, 43).
  */
 import { test, expect } from '@playwright/test';
-import { openEntrance, expectCoversViewport, entranceUrl, exitEntrance, FIXTURE_MEDIA } from './helpers.js';
+import {
+  openEntrance,
+  expectCoversViewport,
+  entranceUrl,
+  exitEntrance,
+  reachWords,
+  FIXTURE_MEDIA
+} from './helpers.js';
 
 test('a media error shows the poster with every control working', async ({ page }) => {
   await openEntrance(page, {
@@ -276,4 +283,71 @@ test('normal entry hands a playing video to the homepage without restarting it',
   // Reused, not recreated: the timeline continued rather than resetting.
   expect(after.time).toBeGreaterThanOrEqual(before);
   expect(after.paused).toBe(false);
+});
+
+test('the handed-over media layer fills the hero exactly', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openEntrance(page);
+  await page.locator('.d-entrance[data-media="ready"]').waitFor({ timeout: 20_000 });
+  await reachWords(page, 'en');
+  await expect(page.locator('.d-entrance')).toHaveCount(0, { timeout: 25_000 });
+  await page.waitForTimeout(400);
+
+  const handover = await page.evaluate(() => {
+    const layer = document.querySelector('.d-media-layer');
+    const hero = document.querySelector('[data-reuses-entrance-video]');
+    if (!layer || !hero) return null;
+    const l = layer.getBoundingClientRect();
+    const h = hero.getBoundingClientRect();
+    return {
+      dTop: Math.abs(l.top - h.top),
+      dLeft: Math.abs(l.left - h.left),
+      dWidth: Math.abs(l.width - h.width),
+      dHeight: Math.abs(l.height - h.height),
+      // The zoom runs fill:forwards; if it is not cancelled it keeps applying
+      // its final top/left and pushes the layer down inside its new parent.
+      leftoverAnimations: layer.getAnimations().length,
+      inlineStyle: layer.getAttribute('style') ?? ''
+    };
+  });
+
+  expect(handover, 'the hero adopted the media layer').not.toBeNull();
+  expect(handover.dTop, 'layer top matches the hero').toBeLessThanOrEqual(1);
+  expect(handover.dLeft, 'layer left matches the hero').toBeLessThanOrEqual(1);
+  expect(handover.dWidth, 'layer width matches the hero').toBeLessThanOrEqual(1);
+  expect(handover.dHeight, 'layer height matches the hero').toBeLessThanOrEqual(1);
+  expect(handover.leftoverAnimations, 'no zoom animation left holding geometry').toBe(0);
+  expect(handover.inlineStyle).toBe('');
+});
+
+test('the hero crop is re-derived for the hero box, not the entrance viewport', async ({ page }) => {
+  // A phone viewport is `narrow` (crop pulled to 20%), but the hero it hands
+  // over to is a much wider box and wants its own alignment.
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openEntrance(page, { media: null });
+  await page.locator('.d-entrance[data-media="ready"]').waitFor({ timeout: 20_000 });
+
+  const entranceCrop = await page.evaluate(
+    () => getComputedStyle(document.querySelector('.d-entrance__video')).objectPosition
+  );
+  expect(entranceCrop).toBe('20% 50%');
+
+  await reachWords(page, 'en');
+  await expect(page.locator('.d-entrance')).toHaveCount(0, { timeout: 25_000 });
+  await page.waitForTimeout(400);
+
+  const heroCrop = await page.evaluate(() => {
+    const hero = document.querySelector('[data-reuses-entrance-video]');
+    const video = document.querySelector('.site-hero video');
+    const rect = hero.getBoundingClientRect();
+    return {
+      objectPosition: video ? getComputedStyle(video).objectPosition : null,
+      ratio: rect.width / rect.height
+    };
+  });
+
+  // The hero here is wider than it is tall relative to the phone viewport, so
+  // it must not keep the narrow alignment.
+  expect(heroCrop.ratio).toBeGreaterThan(0.7);
+  expect(heroCrop.objectPosition).not.toBe('20% 50%');
 });

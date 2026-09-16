@@ -18,6 +18,7 @@ QuickTime master, 21.1 s, 30 fps, 25 MB, with audio.
 | | |
 |---|---|
 | Content | One locked-off wide shot of the soloist and orchestra in a warm-wood hall |
+| Loop | Trimmed to 18.0 s, then seam-crossfaded over 0.6 s, giving a 17.4 s seamless loop |
 | Shot change | A cross-dissolve at **t ≈ 18.15 s** into a 2.3 s close-up of the pianist |
 | Audio | Present in the source, stripped from every encode — the entrance is muted by design |
 
@@ -28,14 +29,14 @@ at all, so `imageio-ffmpeg` was installed from PyPI.
 
 | File | Size | Use |
 |---|---|---|
-| `performance-master.mp4` | 4.2 MB | 1920×1080 H.264, desktop |
-| `performance-master.webm` | 1.4 MB | VP9 alternative |
-| `performance-compact.mp4` | 1.4 MB | 1280×720 H.264, small viewports |
-| `performance-compact.webm` | 0.7 MB | VP9 alternative |
+| `performance-master.mp4` | 4.3 MB | 1920×1080 H.264, desktop |
+| `performance-master.webm` | 1.7 MB | VP9 alternative |
+| `performance-compact.mp4` | 1.3 MB | 1280×720 H.264, small viewports |
+| `performance-compact.webm` | 0.8 MB | VP9 alternative |
 | `performance-poster.jpg` | 134 KB | 1920×1080 frame from t = 9 s |
 
 Against the project budgets (mobile 2–4 MB, desktop 4–8 MB): the compact encode
-is **1.4 MB** and the master **4.2 MB**. Both inside. A viewport at or below
+is **1.3 MB** and the master **4.3 MB**. Both inside. A viewport at or below
 900 CSS px gets the compact encode, so a phone never pulls the desktop master.
 
 H.264 leads the list because it decodes in hardware nearly everywhere — which
@@ -61,10 +62,15 @@ supplying a re-framed close-up that could carry its own alignment. Either is a
 `npm run media` change away — nothing in the code depends on the duration — and
 the original file is untouched.
 
-**One related item is still open and was not part of the approval.** The trimmed
-loop restarts with a visible jump: the camera is locked off but the performers
-have moved between t=18 s and t=0. A short cross-dissolve at the loop point
-would hide it. That is a further editorial change, so it has not been made.
+**The loop seam is now crossfaded**, on a later instruction. The trim used to
+restart with a visible jump — the camera is locked off, but the performers have
+moved between t=18 s and t=0. The encode now blends the trim's tail into its
+head over 0.6 s, so the output's first and last frames are the same image and
+the seam is continuous. Output length is 17.4 s.
+
+Measured rather than eyeballed: PSNR between the final and first frames is
+**36.6 dB**, against **35.9 dB** for two ordinary consecutive frames mid-loop.
+The loop point differs less than normal motion does, so it cannot be seen.
 
 #### Crop alignment, chosen against the real frames
 
@@ -303,7 +309,7 @@ the blur computed from the same progress.
 ## 2. Test results
 
 Command: `npm test` (Playwright). Full log: [`docs/test-run.txt`](./test-run.txt).
-Last run: **118 passed, 0 failed**.
+Last run: **120 passed, 0 failed**.
 
 | Suite | Tests | Result |
 |---|---|---|
@@ -314,7 +320,7 @@ Last run: **118 passed, 0 failed**.
 | `fallbacks.spec.js` — media failure, storage, routing, cleanup | 15 | pass |
 | `locale.spec.js` — provisional language resolution, shape buckets | 6 | pass |
 | `screenshots.spec.js` — evidence capture | 10 | pass |
-| **Total** | **118** | **all passing** |
+| **Total** | **120** | **all passing** |
 
 ### Browser actually used
 
@@ -420,7 +426,7 @@ arrives — they are what the crop-alignment decision should be made from.
 
 | # | Item | Status |
 |---|---|---|
-| 1 | ~~Real performance footage~~ | **Closed.** Supplied, inspected frame by frame, encoded, wired up, measured, and the 18 s trim approved on 2026-09-16. The only related item left open is the loop-point jump described in §1.1, which was not part of the approval. |
+| 1 | ~~Real performance footage~~ | **Closed.** Supplied, inspected frame by frame, encoded, wired up, measured, the 18 s trim approved, and the loop seam crossfaded. |
 | 2 | **Real iOS Safari** | **Not run.** No device or Safari build available here. Inline playback, address-bar expand/collapse, safe-area insets, rotation and gesture interception are unverified on iOS. |
 | 3 | **Real Android Chrome** | **Not run.** Same caveats. |
 | 4 | **Desktop Safari, Firefox, Edge** | **Not run.** Only headless Chromium 141 was available. Firefox/Safari `dvh`, `object-position` and Pointer Events behaviour is unverified. |
@@ -477,7 +483,7 @@ Emulation is **not** treated as equivalent to real-device verification.
 ```bash
 npm install
 npm run fixtures     # regenerate synthetic fixtures
-npm test             # 118 tests
+npm test             # 120 tests
 npx playwright test tests/screenshots.spec.js   # regenerate evidence
 ```
 

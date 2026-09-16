@@ -57,6 +57,14 @@ export function EntranceGate({ eligible = false, media, onLocaleChange }: Entran
   const [handedOver, setHandedOver] = useState(false);
   const [mediaState, setMediaState] = useState<MediaState>('none');
   const videoRef = useRef<HTMLVideoElement>(null);
+  /**
+   * The zoom runs with `fill: 'forwards'` so it holds its last frame while the
+   * hand-over happens. That fill keeps applying top/left/width/height even
+   * after the inline styles are cleared, so it MUST be cancelled once the layer
+   * is re-parented — otherwise the hero's old viewport offset is re-applied
+   * relative to the hero itself and the footage sits pushed down inside it.
+   */
+  const zoomAnimation = useRef<Animation | null>(null);
 
   // Known synchronously: the media source is chosen once from the shape, so a
   // placeholder would permanently pick the wrong one.
@@ -174,6 +182,7 @@ export function EntranceGate({ eligible = false, media, onLocaleChange }: Entran
       ],
       { duration: TIMING.zoomOut, easing: 'cubic-bezier(0.65, 0, 0.35, 1)', fill: 'forwards' }
     );
+    zoomAnimation.current = animation;
 
     await animation.finished.catch(() => {
       /* an interrupted animation still lands in the hero below */
@@ -187,13 +196,27 @@ export function EntranceGate({ eligible = false, media, onLocaleChange }: Entran
       const host = heroHost();
       const video = videoRef.current;
       if (mediaLayer && host && video && !video.paused && video.readyState >= 2) {
+        const heroBox = host.getBoundingClientRect();
+        // Cancel before re-parenting: a finished fill:forwards animation still
+        // wins over the class's `inset: 0`, and its final `top` would be
+        // re-applied relative to the hero instead of the viewport.
+        zoomAnimation.current?.cancel();
+        zoomAnimation.current = null;
         // Clear the inline geometry the zoom left behind; the hero's own box
         // takes over from here.
         mediaLayer.removeAttribute('style');
         mediaLayer.className = 'd-media-layer d-media-layer--hero';
         host.appendChild(mediaLayer);
+        // The hero is a different shape from the viewport the entrance filled,
+        // so the crop is re-derived for its box rather than left on the
+        // entrance's alignment.
+        if (heroBox.width > 0 && heroBox.height > 0) {
+          setShape(viewportShape(heroBox.width, heroBox.height));
+        }
         setHandedOver(true);
       } else {
+        zoomAnimation.current?.cancel();
+        zoomAnimation.current = null;
         mediaLayer?.remove();
         setHandedOver(false);
       }
