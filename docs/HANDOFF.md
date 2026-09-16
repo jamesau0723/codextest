@@ -10,28 +10,93 @@ run produced the result.
 
 ## 1. Two dependencies you need to know about first
 
-### 1.1 The performance footage was never available here
+### 1.1 The performance footage is now supplied and wired up
 
-The Google Drive link in the brief could not be reached: this build
-environment's network policy denied the connection
-(`HTTP 403` to `CONNECT drive.google.com:443`). The video was never downloaded,
-opened, or inspected.
+**This dependency is closed.** The recording was delivered as a 3840×2160 HEVC
+QuickTime master, 21.1 s, 30 fps, 25 MB, with audio.
 
-Consequently:
+| | |
+|---|---|
+| Content | One locked-off wide shot of the soloist and orchestra in a warm-wood hall |
+| Shot change | A cross-dissolve at **t ≈ 18.15 s** into a 2.3 s close-up of the pianist |
+| Audio | Present in the source, stripped from every encode — the entrance is muted by design |
 
-- `src/entrance/mediaConfig.js` ships with `master.src = null`. **No invented
-  filename is presented as existing footage.**
-- All layout, geometry and crop testing used **synthetic test patterns**
-  (`tests/fixtures/`), clearly labelled as such.
-- **The final crop composition is NOT verified.** Cover geometry is verified;
-  whether the crop keeps the right performer and the piano in frame is an
-  editorial judgement that requires the real recording.
-- Crop alignment is `50% 50%` for all three viewport shapes. That is an
-  **untuned default, not a decision**. Tuning it needs frame-by-frame review of
-  the real loop, including its shot changes.
+Decoding it needed a real FFmpeg: the bundled Playwright build has no decoders
+at all, so `imageio-ffmpeg` was installed from PyPI.
 
-With no media configured, the entrance runs its documented failure path:
-full-screen black, white text, every control working. That path is tested.
+#### What now ships
+
+| File | Size | Use |
+|---|---|---|
+| `performance-master.mp4` | 4.2 MB | 1920×1080 H.264, desktop |
+| `performance-master.webm` | 1.4 MB | VP9 alternative |
+| `performance-compact.mp4` | 1.4 MB | 1280×720 H.264, small viewports |
+| `performance-compact.webm` | 0.7 MB | VP9 alternative |
+| `performance-poster.jpg` | 134 KB | 1920×1080 frame from t = 9 s |
+
+Against the project budgets (mobile 2–4 MB, desktop 4–8 MB): the compact encode
+is **1.4 MB** and the master **4.2 MB**. Both inside. A viewport at or below
+900 CSS px gets the compact encode, so a phone never pulls the desktop master.
+
+H.264 leads the list because it decodes in hardware nearly everywhere — which
+matters for battery behind a looping background — and is the only format older
+iOS Safari accepts. VP9 is there for Chromium builds compiled without
+proprietary codecs, which includes the browser this project tests in; that is
+how the suite can exercise the real footage at all.
+
+#### The editorial decision you need to approve
+
+**The encodes are trimmed to 18.0 s — the wide shot only, stopping just before
+the dissolve.** This is a proposal, not a settled call.
+
+The close-up cannot survive a full-viewport crop. On a phone in portrait only
+**26 % of the source width is visible**, and the face sits right of centre:
+
+- at the alignment the wide shot needs (x = 20 %) the close-up is almost
+  entirely empty red wall, with a sliver of hair at the edge;
+- even a centred crop cuts the face in half.
+
+Spec §7.5 forbids silently zooming further in or letting the layout letterbox,
+and asks for shot-specific framing to be approved rather than assumed. So the
+trim is the honest option that needs your sign-off. Three ways forward:
+
+1. **Keep the trim** (what ships now) — one composition, one alignment, a
+   gently paced 18 s loop with no cut while anyone is reading.
+2. **Use the full 21.1 s** — re-encode without `-t 18.0`; nothing in the code
+   depends on the duration. The loop then ends on a half-cropped close-up.
+3. **Supply a re-framed close-up** centred on the face, and it can be given its
+   own alignment.
+
+The original file is untouched. Note also that the trimmed loop restarts with a
+visible jump, since the camera is locked off but the performers have moved; a
+short cross-dissolve at the loop point would hide it, and is another editorial
+change rather than something to do silently.
+
+#### Crop alignment, chosen against the real frames
+
+The soloist sits at roughly **x = 13 %** of the 3840 px frame, well left of
+centre. How much of the frame each shape actually shows, and what was chosen:
+
+| Shape | Example | Visible | Alignment | Why |
+|---|---|---|---|---|
+| narrow | 390×844 | 26 % of width | **20 % 50 %** | A centred crop loses the soloist completely |
+| balanced | 768×1024 | 42 % of width | **30 % 50 %** | Centred puts him on the very edge |
+| wide | 1440×900 | 90 % of width | 50 % 50 % | Everything fits |
+| wide | 2560×1080 | 100 % width, 75 % height | 50 % 50 % | Crops floor and ceiling, keeps the players |
+
+Verified frame by frame across the loop, which is a single continuous shot, so
+one alignment holds throughout. Previews are in `docs/screenshots/crop-preview-*`
+and are now rendered from the real footage, not the fixture.
+
+#### Contrast, measured against the real footage
+
+Sampled every frame at 2 fps, taking the brightest pixel inside the band the
+text actually occupies, compositing the 60 % scrim over it, and computing
+white-on-that:
+
+**Worst case 6.61:1**, against a target of 4.5:1. The brightest text-area pixel
+is `rgb(255, 230, 171)` — a stage highlight — which the scrim brings to
+`rgb(102, 92, 68)`. `--overlay-alpha` does **not** need raising for this footage.
 
 ### 1.2 The repository was empty
 
@@ -244,7 +309,7 @@ the blur computed from the same progress.
 ## 2. Test results
 
 Command: `npm test` (Playwright). Full log: [`docs/test-run.txt`](./test-run.txt).
-Last run: **116 passed, 0 failed**.
+Last run: **118 passed, 0 failed**.
 
 | Suite | Tests | Result |
 |---|---|---|
@@ -255,7 +320,7 @@ Last run: **116 passed, 0 failed**.
 | `fallbacks.spec.js` — media failure, storage, routing, cleanup | 15 | pass |
 | `locale.spec.js` — provisional language resolution, shape buckets | 6 | pass |
 | `screenshots.spec.js` — evidence capture | 10 | pass |
-| **Total** | **116** | **all passing** |
+| **Total** | **118** | **all passing** |
 
 ### Browser actually used
 
@@ -361,7 +426,7 @@ arrives — they are what the crop-alignment decision should be made from.
 
 | # | Item | Status |
 |---|---|---|
-| 1 | **Real performance footage** | Never supplied or inspected. Final framing, crop alignment, brightest-frame contrast and file-size budgets are all unverified. |
+| 1 | ~~Real performance footage~~ | **Closed.** Supplied, inspected frame by frame, encoded, wired up, and measured. What remains is your sign-off on the 18 s trim described in §1.1. |
 | 2 | **Real iOS Safari** | **Not run.** No device or Safari build available here. Inline playback, address-bar expand/collapse, safe-area insets, rotation and gesture interception are unverified on iOS. |
 | 3 | **Real Android Chrome** | **Not run.** Same caveats. |
 | 4 | **Desktop Safari, Firefox, Edge** | **Not run.** Only headless Chromium 141 was available. Firefox/Safari `dvh`, `object-position` and Pointer Events behaviour is unverified. |
@@ -418,7 +483,7 @@ Emulation is **not** treated as equivalent to real-device verification.
 ```bash
 npm install
 npm run fixtures     # regenerate synthetic fixtures
-npm test             # 116 tests
+npm test             # 118 tests
 npx playwright test tests/screenshots.spec.js   # regenerate evidence
 ```
 

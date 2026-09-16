@@ -13,7 +13,8 @@
     "test": "playwright test",
     "test:report": "playwright show-report",
     "export:preview": "PREVIEW_EXPORT=1 next build",
-    "fonts": "node tools/make-fonts.mjs"
+    "fonts": "node tools/make-fonts.mjs",
+    "media": "node tools/make-media.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.56.0",

@@ -65,6 +65,10 @@ export function EntranceGate({ eligible = false, media, onLocaleChange }: Entran
       ? 'balanced'
       : viewportShape(window.innerWidth, window.innerHeight)
   );
+  // Captured once, alongside the shape: both feed the single source choice.
+  const [viewportWidth] = useState(() =>
+    typeof window === 'undefined' ? Number.POSITIVE_INFINITY : window.innerWidth
+  );
 
   /**
    * The media layer is a plain DOM node owned by this component, not by the
@@ -220,6 +224,7 @@ export function EntranceGate({ eligible = false, media, onLocaleChange }: Entran
           <PerformanceBackground
             media={resolvedMedia}
             shape={shape}
+            viewportWidth={viewportWidth}
             reducedMotion={reducedMotion}
             paused={false}
             videoRef={videoRef}

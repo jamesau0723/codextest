@@ -256,8 +256,10 @@ test('the hold hint appears only after a language is chosen, then fades away', a
 
   await page.locator('.d-language__option[data-locale="en"]').click();
 
-  // Revealed as soon as the language is chosen, fading in over ~320ms.
-  expect(await hint.getAttribute('data-state')).toBe('visible');
+  // Revealed as soon as the language is chosen, fading in over ~320ms. Polled
+  // rather than read instantly: the reveal lands on the render that mounts the
+  // next scene.
+  await expect.poll(async () => hint.getAttribute('data-state'), { timeout: 3000 }).toBe('visible');
   await expect(hint).toHaveText('Hold anywhere for 1.5s to skip');
   await expect
     .poll(async () => hint.evaluate((node) => Number(getComputedStyle(node).opacity)), {

@@ -471,7 +471,12 @@ test('only one video source is requested for the entrance session', async ({ pag
         type: 'video/webm',
         poster: '/fixtures/portrait-9x16.png',
         width: 720,
-        height: 1280
+        height: 1280,
+        alignment: {
+          narrow: { x: '50%', y: '50%' },
+          balanced: { x: '50%', y: '50%' },
+          wide: { x: '50%', y: '50%' }
+        }
       }
     }
   });

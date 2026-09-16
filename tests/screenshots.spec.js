@@ -119,7 +119,8 @@ test('capture a portrait-to-landscape rotation without restarting', async ({ pag
 
 test('capture the crop previews per viewport shape', async ({ page }) => {
   // Crop previews with the scrim removed, so the actual cover crop is visible
-  // for editorial review. Synthetic pattern, not the real footage.
+  // for editorial review. These use the PRODUCTION media configuration — the
+  // real performance footage — not the synthetic fixture.
   for (const shape of [
     { name: 'narrow-390x844', width: 390, height: 844 },
     { name: 'balanced-820x1180', width: 820, height: 1180 },
@@ -127,8 +128,8 @@ test('capture the crop previews per viewport shape', async ({ page }) => {
     { name: 'ultrawide-3440x1440', width: 3440, height: 1440 }
   ]) {
     await page.setViewportSize({ width: shape.width, height: shape.height });
-    await openEntrance(page);
-    await page.locator('.d-entrance[data-media="ready"]').waitFor();
+    await openEntrance(page, { media: null });
+    await page.locator('.d-entrance[data-media="ready"]').waitFor({ timeout: 20_000 });
     await page.addStyleTag({
       content:
         '.d-entrance__scrim,.d-entrance__ui,.d-entrance__filmedge{opacity:0 !important;backdrop-filter:none !important}'

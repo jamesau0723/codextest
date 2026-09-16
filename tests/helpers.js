@@ -1,13 +1,28 @@
 import { expect } from '@playwright/test';
 
-/** Fixture media, passed through the documented test seam. */
+/**
+ * Fixture media, passed through the documented test seam.
+ *
+ * The alignment is pinned to a neutral 50% 50% rather than inheriting the
+ * production values, which are deliberately pulled left to hold the soloist in
+ * the real footage. Geometry assertions measure the fixture's circle along the
+ * centre column, and an off-centre crop would sample a chord instead of the
+ * diameter. Production alignment is asserted separately in locale.spec.ts.
+ */
+const CENTRED = {
+  narrow: { x: '50%', y: '50%' },
+  balanced: { x: '50%', y: '50%' },
+  wide: { x: '50%', y: '50%' }
+};
+
 export const FIXTURE_MEDIA = {
   master: {
     src: '/fixtures/landscape-16x9.webm',
     type: 'video/webm',
     poster: '/fixtures/landscape-16x9.png',
     width: 1280,
-    height: 720
+    height: 720,
+    alignment: CENTRED
   }
 };
 

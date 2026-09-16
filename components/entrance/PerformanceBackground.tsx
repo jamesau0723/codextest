@@ -12,6 +12,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   alignmentFor,
+  pickEncoding,
   selectSource,
   type MediaConfig,
   type ViewportShape
@@ -28,6 +29,7 @@ export type MediaState =
 export function PerformanceBackground({
   media,
   shape,
+  viewportWidth,
   reducedMotion,
   paused,
   videoRef,
@@ -35,6 +37,8 @@ export function PerformanceBackground({
 }: {
   media: MediaConfig;
   shape: ViewportShape;
+  /** Decides between the desktop master and the smaller encode (spec 7.9). */
+  viewportWidth: number;
   reducedMotion: boolean;
   paused: boolean;
   videoRef: React.RefObject<HTMLVideoElement | null>;
@@ -42,7 +46,14 @@ export function PerformanceBackground({
 }) {
   // The source is chosen once and kept for the whole session, so a rotation
   // cannot trigger a second download or a timeline jump.
-  const [source] = useState(() => selectSource(shape, media));
+  const [source] = useState(() => selectSource(shape, viewportWidth, media));
+  // Negotiated once, alongside the source: one file is requested per session.
+  const [src] = useState(() =>
+    pickEncoding(source, (type) => {
+      if (typeof document === 'undefined') return '';
+      return document.createElement('video').canPlayType(type);
+    })
+  );
   const [state, setState] = useState<MediaState>('none');
   const [posterFailed, setPosterFailed] = useState(false);
   const failed = useRef(false);
@@ -56,7 +67,7 @@ export function PerformanceBackground({
   };
 
   useEffect(() => {
-    if (!source.src) {
+    if (!src) {
       failed.current = true;
       report(source.poster ? 'poster-only' : 'none');
       return;
@@ -68,12 +79,12 @@ export function PerformanceBackground({
     }
     report('loading');
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [source.src, reducedMotion]);
+  }, [src, reducedMotion]);
 
   // Pause and resume follow the entrance, never the other way round.
   useEffect(() => {
     const video = videoRef.current;
-    if (!video || !source.src || reducedMotion || failed.current) return;
+    if (!video || !src || reducedMotion || failed.current) return;
     if (paused) {
       video.pause();
       return;
@@ -93,10 +104,10 @@ export function PerformanceBackground({
       report('autoplay-blocked');
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [paused, source.src, reducedMotion]);
+  }, [paused, src, reducedMotion]);
 
   const showVideo =
-    Boolean(source.src) && !reducedMotion && state !== 'poster-only' && state !== 'none';
+    Boolean(src) && !reducedMotion && state !== 'poster-only' && state !== 'none';
   const objectPosition = `${alignment.x} ${alignment.y}`;
 
   return (
@@ -130,7 +141,7 @@ export function PerformanceBackground({
           loop={media.loop}
           preload="auto"
           poster={source.poster ?? undefined}
-          src={source.src ?? undefined}
+          src={src ?? undefined}
           onLoadedData={() => {
             report('ready');
             const video = videoRef.current;
