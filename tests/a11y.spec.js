@@ -2,7 +2,7 @@
  * Accessibility, motion and keyboard (spec 8; acceptance 17–21, 28).
  */
 import { test, expect } from '@playwright/test';
-import { openEntrance, reachWords, FIXTURE_MEDIA } from './helpers.js';
+import { openEntrance, reachWords, exitEntrance, revealState, FIXTURE_MEDIA } from './helpers.js';
 import { decodePng, pixelAt, luminance } from './png.js';
 
 test.describe('reduced motion', () => {
@@ -23,9 +23,14 @@ test.describe('reduced motion', () => {
     expect(media.state).toBe('reduced-still');
 
     await page.locator('.d-language__option[data-locale="zh-Hant"]').click();
-    // The question is displayed in full immediately — no typing, no caret.
-    expect(await page.locator('.d-type__g:not(.is-shown)').count()).toBe(0);
-    expect(await page.locator('.d-type__g.has-caret').count()).toBe(0);
+    // The question is displayed in full immediately: no scrub track, no blur,
+    // and no scrolling asked of the user.
+    expect(await page.locator('.d-scroll-track').count()).toBe(0);
+    expect(await page.locator('.d-scroll-cue').isVisible()).toBe(false);
+    for (const word of await revealState(page)) {
+      expect(word.opacity, `${word.text} fully visible`).toBe(1);
+      expect(word.blur, `${word.text} unblurred`).toBe(0);
+    }
 
     await page.locator('[data-scene="question1"] [data-action="advance"]').click();
     await page.locator('[data-scene="question2"]').waitFor();
@@ -88,16 +93,13 @@ test('Escape yields to a higher-priority dialog', async ({ page }) => {
 test('language and controls are operable by keyboard alone', async ({ page }) => {
   await openEntrance(page);
 
-  // Skip is the first actionable control in the entrance's focus order, so it
-  // is one Shift+Tab from the scene heading that receives initial focus.
+  // With Skip removed, the language options are the first actionable controls
+  // in the entrance's focus order.
   const firstTabbable = await page.evaluate(() => {
     const selector = 'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])';
-    return document.querySelector('.d-entrance').querySelector(selector)?.dataset.action;
+    return document.querySelector('.d-entrance').querySelector(selector)?.dataset.locale;
   });
-  expect(firstTabbable).toBe('skip');
-
-  await page.keyboard.press('Shift+Tab');
-  expect(await page.evaluate(() => document.activeElement?.dataset.action)).toBe('skip');
+  expect(firstTabbable).toBe('zh-Hant');
 
   // Forward from the heading reaches the language options.
   await page.keyboard.press('Tab');
@@ -125,7 +127,7 @@ test('focus is restricted to the entrance while it is open', async ({ page }) =>
 
 test('focus moves to the homepage main content after entry', async ({ page }) => {
   await openEntrance(page);
-  await page.locator('.d-entrance__skip').click();
+  await exitEntrance(page);
   await expect(page.locator('.d-entrance')).toHaveCount(0, { timeout: 3000 });
 
   expect(await page.evaluate(() => document.activeElement?.id)).toBe('main-content');
@@ -140,6 +142,10 @@ test('each scene moves focus to its heading, and words do not steal focus', asyn
 
   await page.locator('.d-language__option[data-locale="en"]').click();
   expect(await page.evaluate(() => document.activeElement?.className)).toContain('d-scene__question');
+  // Focusing the heading must not scroll the scrub track away from the top.
+  expect(await page.evaluate(
+    () => document.querySelector('.d-entrance__content').scrollTop
+  )).toBe(0);
 
   await page.locator('[data-scene="question1"] [data-action="advance"]').click();
   await page.locator('[data-scene="question2"]').waitFor();
@@ -159,13 +165,22 @@ test('assistive technology gets whole questions and one stable word list', async
 
   // The per-grapheme layer is hidden from assistive technology; the complete
   // question is exposed once.
-  const typing = await page.evaluate(() => {
-    const layer = document.querySelector('.d-type');
+  const reveal = await page.evaluate(() => {
+    const layer = document.querySelector('.d-reveal');
     const semantic = document.querySelector('.d-scene__question .sr-only');
-    return { hidden: layer.getAttribute('aria-hidden'), text: semantic.textContent };
+    const cue = document.querySelector('.d-scroll-cue');
+    return {
+      hidden: layer.getAttribute('aria-hidden'),
+      text: semantic.textContent,
+      cueHidden: cue.getAttribute('aria-hidden')
+    };
   });
-  expect(typing.hidden).toBe('true');
-  expect(typing.text).toBe('上一次被音乐打动，是什么时候？');
+  // The decorative per-word layer and the scroll affordance are both hidden
+  // from assistive technology; the complete question is exposed once, in full,
+  // regardless of scroll position.
+  expect(reveal.hidden).toBe('true');
+  expect(reveal.cueHidden).toBe('true');
+  expect(reveal.text).toBe('上一次被音乐打动，是什么时候？');
 
   await page.locator('[data-scene="question1"] [data-action="advance"]').click();
   await page.locator('[data-scene="question2"]').waitFor();
@@ -218,7 +233,7 @@ test('every control has a visible focus indicator and a 44px target', async ({ p
     return out;
   });
 
-  expect(controls.length).toBeGreaterThan(0);
+  expect(controls.length).toBe(3); // three language options; Skip and pause removed
   for (const control of controls) {
     expect(control.height, `${control.action} height`).toBeGreaterThanOrEqual(44);
     expect(control.width, `${control.action} width`).toBeGreaterThanOrEqual(44);

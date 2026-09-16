@@ -99,6 +99,56 @@ export async function expectCoversViewport(page, selector) {
   return result;
 }
 
+/**
+ * A point on the entrance that sits over no control.
+ * (Previously derived from the Skip button, which has been removed.)
+ */
+export async function backgroundPoint(page) {
+  return page.evaluate(() => ({
+    x: Math.round(window.innerWidth * 0.18),
+    y: Math.round(window.innerHeight * 0.2)
+  }));
+}
+
+/**
+ * Scrub a scroll-scrub question scene to a fraction of its reveal range.
+ * `ratio` 0 = untouched, 1 = fully revealed.
+ */
+export async function scrubTo(page, ratio) {
+  await page.evaluate((value) => {
+    const scroller = document.querySelector('.d-entrance__content');
+    const track = document.querySelector('.d-scroll-track');
+    const pin = document.querySelector('.d-scroll-pin');
+    if (!scroller || !track || !pin) return;
+    scroller.scrollTop = (track.offsetHeight - pin.offsetHeight) * value;
+  }, ratio);
+  // Let one frame apply the reveal.
+  await page.waitForTimeout(140);
+}
+
+/** Read each revealed word's opacity and blur. */
+export async function revealState(page) {
+  return page.evaluate(() =>
+    Array.from(document.querySelectorAll('.d-reveal__w')).map((word) => {
+      const style = getComputedStyle(word);
+      const match = /blur\(([\d.]+)px\)/.exec(style.filter);
+      return {
+        text: word.textContent,
+        opacity: Number(style.opacity),
+        blur: match ? Number(match[1]) : 0
+      };
+    })
+  );
+}
+
+/**
+ * Exit the entrance. Skip was removed at the client's request, so Escape is
+ * the direct exit route in tests.
+ */
+export async function exitEntrance(page) {
+  await page.keyboard.press('Escape');
+}
+
 /** Perform a hold gesture of a given duration at a point. */
 export async function hold(page, { x, y, ms, steps = 0 }) {
   await page.mouse.move(x, y);

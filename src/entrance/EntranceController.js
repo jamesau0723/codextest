@@ -107,9 +107,7 @@ export class EntranceController {
     this.controls = new EntranceControls({
       root: this.root,
       locale: this.locale,
-      reducedMotion: this.reducedMotion,
-      onSkip: () => this.commitExit('skipped'),
-      onTogglePause: () => this.togglePause()
+      reducedMotion: this.reducedMotion
     });
 
     this.hold = new HoldToSkip({
@@ -249,6 +247,8 @@ export class EntranceController {
     this.controls.setLocale(locale);
     this.root.setAttribute('aria-label', copyFor(locale).entranceLabel);
     this.enterState(STATE.QUESTION_1);
+    // The hold hint appears only now, holds briefly, then fades for good.
+    this.controls.revealHint();
   }
 
   // ── Frame loop ─────────────────────────────────────────────────────────────
@@ -260,7 +260,9 @@ export class EntranceController {
     switch (this.state) {
       case STATE.QUESTION_1:
       case STATE.QUESTION_2:
-        this.content.updateTyping(this.sceneState, elapsed);
+        // Reveal is a pure function of scroll position, so the scene clock is
+        // not consulted here at all.
+        this.content.updateScrollReveal(this.sceneState);
         break;
 
       case STATE.WORDS: {
@@ -282,24 +284,19 @@ export class EntranceController {
 
   // ── Pause ──────────────────────────────────────────────────────────────────
 
-  togglePause() {
-    this.setPaused(!this.motionPaused);
-  }
-
+  /**
+   * Internal only since the pause control was removed: the hold gesture and
+   * hidden-tab handling still need to freeze and restore playback.
+   */
   setPaused(paused) {
     if (this.motionPaused === paused) return;
     this.motionPaused = paused;
     if (paused) {
       this.clock.freeze('pause');
-      // Already-typed text is completed immediately so it stays readable.
-      if (this.state === STATE.QUESTION_1 || this.state === STATE.QUESTION_2) {
-        this.content.completeTyping(this.sceneState);
-      }
     } else {
       this.clock.thaw('pause');
     }
     this.background.setPaused(paused);
-    this.controls.setPaused(paused);
     this.root.dataset.paused = String(paused);
   }
 

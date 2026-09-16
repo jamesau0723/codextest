@@ -2,7 +2,7 @@
  * Failure states, persistence and routing (spec 7.7, 8, 9; acceptance 24–27, 40, 43).
  */
 import { test, expect } from '@playwright/test';
-import { openEntrance, expectCoversViewport, entranceUrl, FIXTURE_MEDIA } from './helpers.js';
+import { openEntrance, expectCoversViewport, entranceUrl, exitEntrance, FIXTURE_MEDIA } from './helpers.js';
 
 test('a media error shows the poster with every control working', async ({ page }) => {
   await openEntrance(page, {
@@ -25,7 +25,7 @@ test('a media error shows the poster with every control working', async ({ page 
   )).toBe('cover');
 
   await expect(page.locator('.d-language__option')).toHaveCount(3);
-  await page.locator('.d-entrance__skip').click();
+  await exitEntrance(page);
   await expect(page.locator('.d-entrance')).toHaveCount(0, { timeout: 3000 });
 });
 
@@ -53,7 +53,7 @@ test('video and poster both failing gives full-screen black with white UI', asyn
   expect(appearance.headingColour).toBe('rgb(255, 255, 255)');
   expect(appearance.posterHidden).toBe(true);
 
-  await expect(page.locator('.d-entrance__skip')).toBeEnabled();
+  expect(await page.locator('.d-entrance__hint').count()).toBe(1);
 });
 
 test('an absent video configuration never hides the UI or blocks skipping', async ({ page }) => {
@@ -62,7 +62,7 @@ test('an absent video configuration never hides the UI or blocks skipping', asyn
   await expect(page.locator('.d-entrance[data-media="none"]')).toBeVisible();
   await expect(page.locator('.d-language__option')).toHaveCount(3);
   await expectCoversViewport(page, '.d-entrance');
-  await page.locator('.d-entrance__skip').click();
+  await exitEntrance(page);
   await expect(page.locator('.d-entrance')).toHaveCount(0, { timeout: 3000 });
 });
 
@@ -74,7 +74,7 @@ test('the entrance renders before media is ready and never waits on it', async (
   await page.goto(entranceUrl(FIXTURE_MEDIA));
 
   await expect(page.locator('.d-language__option')).toHaveCount(3, { timeout: 4000 });
-  await expect(page.locator('.d-entrance__skip')).toBeEnabled();
+  expect(await page.locator('.d-entrance__hint').count()).toBe(1);
   await expectCoversViewport(page, '.d-entrance__scrim');
 });
 
@@ -91,7 +91,7 @@ test('autoplay denial keeps the entrance usable', async ({ page }) => {
   await openEntrance(page);
   await expect(page.locator('.d-entrance[data-media="autoplay-blocked"]')).toBeVisible({ timeout: 6000 });
   await expect(page.locator('.d-language__option')).toHaveCount(3);
-  await page.locator('.d-entrance__skip').click();
+  await exitEntrance(page);
   await expect(page.locator('.d-entrance')).toHaveCount(0, { timeout: 3000 });
 });
 
@@ -112,7 +112,7 @@ test('the entrance works when storage is unavailable', async ({ page }) => {
   await expect(page.locator('.d-language__option')).toHaveCount(3);
   await page.locator('.d-language__option[data-locale="en"]').click();
   await expect(page.locator('[data-scene="question1"]')).toBeVisible();
-  await page.locator('.d-entrance__skip').click();
+  await exitEntrance(page);
   await expect(page.locator('.d-entrance')).toHaveCount(0, { timeout: 3000 });
 
   expect(errors, `no uncaught errors: ${errors.join(' | ')}`).toHaveLength(0);
@@ -120,7 +120,7 @@ test('the entrance works when storage is unavailable', async ({ page }) => {
 
 test('a returning visitor bypasses the entrance', async ({ page }) => {
   await openEntrance(page);
-  await page.locator('.d-entrance__skip').click();
+  await exitEntrance(page);
   await expect(page.locator('.d-entrance')).toHaveCount(0, { timeout: 3000 });
 
   await page.reload();
@@ -162,7 +162,7 @@ test('Replay reopens the entrance without changing the saved outcome', async ({ 
   expect(await page.evaluate(() => localStorage.getItem('dFestival.entranceOutcome'))).toBe('completed');
 
   // Exiting a replay returns focus to its launching control.
-  await page.locator('.d-entrance__skip').click();
+  await exitEntrance(page);
   await expect(page.locator('.d-entrance')).toHaveCount(0, { timeout: 3000 });
   expect(await page.evaluate(() => document.activeElement?.dataset.action)).toBe('replay-entrance');
   expect(await page.evaluate(() => localStorage.getItem('dFestival.entranceOutcome'))).toBe('skipped');
@@ -227,7 +227,7 @@ test('font failure falls back to a readable serif without clipping', async ({ pa
 
 test('dismissal cleans up listeners, timers and scroll state', async ({ page }) => {
   await openEntrance(page);
-  await page.locator('.d-entrance__skip').click();
+  await exitEntrance(page);
   await expect(page.locator('.d-entrance')).toHaveCount(0, { timeout: 3000 });
 
   const state = await page.evaluate(() => ({

@@ -1,9 +1,14 @@
 /**
- * EntranceControls (spec 5, 6 feedback layer).
+ * EntranceControls — hold hint and hold-progress feedback.
  *
- * Skip (top right, never disabled), pause/resume (bottom left), the hold hint
- * (bottom centre) and the hold-progress ring. All are safe-area aware via CSS;
- * this module owns their labels and state.
+ * Deviations from spec v2.0 section 5, made at the client's request:
+ *  - the persistent Skip control (top right) has been removed
+ *  - the pause/resume control (bottom left) has been removed
+ *  - the hold hint is no longer persistent: it appears once the language has
+ *    been chosen, holds for 2s, then fades away for good
+ *
+ * Remaining exit routes: the 1500 ms hold anywhere, Escape, Continue through
+ * the sequence, and Enter D. See docs/HANDOFF.md section 7.
  */
 import { copyFor, TIMING } from './EntranceContentData.js';
 
@@ -11,13 +16,13 @@ const RING_RADIUS = 13;
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
 
 export class EntranceControls {
-  constructor({ root, locale, reducedMotion, onSkip, onTogglePause }) {
+  constructor({ root, locale, reducedMotion }) {
     this.root = root;
     this.locale = locale;
     this.reducedMotion = Boolean(reducedMotion);
-    this.onSkip = onSkip;
-    this.onTogglePause = onTogglePause;
-    this.paused = false;
+    this.hintTimer = null;
+    this.hintFadeTimer = null;
+    this.hintShown = false;
     this.build();
   }
 
@@ -29,42 +34,22 @@ export class EntranceControls {
     const copy = this.copy;
     const ui = this.root.querySelector('.d-entrance__ui');
 
-    // Skip is first in DOM order so it is the first reachable actionable
-    // control for keyboard and screen-reader users.
-    const skip = document.createElement('button');
-    skip.type = 'button';
-    skip.className = 'd-button d-entrance__skip';
-    skip.dataset.action = 'skip';
-    skip.lang = copy.htmlLang;
-    skip.textContent = copy.skip;
-    skip.addEventListener('click', () => this.onSkip?.());
-    ui.prepend(skip);
-    this.skip = skip;
-
     const foot = document.createElement('div');
     foot.className = 'd-entrance__foot';
-
-    const pause = document.createElement('button');
-    pause.type = 'button';
-    pause.className = 'd-button d-button--compact d-entrance__pause';
-    pause.dataset.action = 'pause';
-    pause.lang = copy.htmlLang;
-    pause.textContent = copy.pause;
-    pause.addEventListener('click', () => this.onTogglePause?.());
-    foot.appendChild(pause);
-    this.pause = pause;
 
     const hint = document.createElement('p');
     hint.className = 'd-entrance__hint';
     hint.lang = copy.htmlLang;
     hint.textContent = copy.holdHint;
+    // Hidden until the language has been chosen.
+    hint.dataset.state = 'idle';
     foot.appendChild(hint);
     this.hint = hint;
 
     ui.appendChild(foot);
 
     // Hold feedback sits in a fixed safe location above the bottom hint and
-    // must never steal pointer events from the gesture it is reporting on.
+    // never steals pointer events from the gesture it is reporting on.
     const hold = document.createElement('div');
     hold.className = 'd-entrance__hold';
     hold.setAttribute('aria-hidden', 'true');
@@ -91,22 +76,35 @@ export class EntranceControls {
     this.hold = hold;
   }
 
+  /**
+   * Show the hold hint once, for `TIMING.hintVisible`, then fade it away.
+   * Called when the language has been chosen; never repeats.
+   */
+  revealHint() {
+    if (this.hintShown) return;
+    this.hintShown = true;
+    this.hint.dataset.state = 'visible';
+
+    this.hintTimer = setTimeout(() => {
+      this.hintTimer = null;
+      this.hint.dataset.state = 'leaving';
+      this.hintFadeTimer = setTimeout(() => {
+        this.hintFadeTimer = null;
+        // Out of the accessibility tree too, once it is gone for good.
+        this.hint.dataset.state = 'gone';
+        this.hint.hidden = true;
+      }, TIMING.hintFade);
+    }, TIMING.hintVisible);
+  }
+
   setLocale(locale) {
     this.locale = locale;
     const copy = this.copy;
-    for (const node of [this.skip, this.pause, this.hint, this.holdLabel]) {
-      if (node) node.lang = copy.htmlLang;
+    if (this.hint) {
+      this.hint.lang = copy.htmlLang;
+      this.hint.textContent = copy.holdHint;
     }
-    this.skip.textContent = copy.skip;
-    this.pause.textContent = this.paused ? copy.resume : copy.pause;
-    this.hint.textContent = copy.holdHint;
-  }
-
-  setPaused(paused) {
-    this.paused = Boolean(paused);
-    const copy = this.copy;
-    this.pause.textContent = this.paused ? copy.resume : copy.pause;
-    this.pause.setAttribute('aria-pressed', String(this.paused));
+    if (this.holdLabel) this.holdLabel.lang = copy.htmlLang;
   }
 
   /**
@@ -136,13 +134,14 @@ export class EntranceControls {
     if (this.ringFill) this.ringFill.style.strokeDashoffset = String(RING_CIRCUMFERENCE);
   }
 
-  /** Swap Continue for Enter D labelling is owned by EntranceContent; the
-   *  persistent controls never change position between scenes. */
   destroy() {
-    this.skip?.remove();
+    clearTimeout(this.hintTimer);
+    clearTimeout(this.hintFadeTimer);
+    this.hintTimer = null;
+    this.hintFadeTimer = null;
     this.hold?.remove();
-    this.pause?.closest('.d-entrance__foot')?.remove();
+    this.hint?.closest('.d-entrance__foot')?.remove();
   }
 }
 
-export { RING_CIRCUMFERENCE, TIMING };
+export { RING_CIRCUMFERENCE };

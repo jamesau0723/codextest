@@ -8,7 +8,7 @@
  */
 import { test, expect } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
-import { openEntrance, reachWords } from './helpers.js';
+import { openEntrance, reachWords, scrubTo } from './helpers.js';
 
 const OUT = 'docs/screenshots';
 mkdirSync(OUT, { recursive: true });
@@ -30,25 +30,32 @@ for (const size of CAPTURE_SIZES) {
     // Scene 1: language choice, all three options.
     await page.screenshot({ path: `${OUT}/${size.name}-1-language.png` });
 
+    // Question 1, captured at three points along the scroll scrub.
     await page.locator('.d-language__option[data-locale="en"]').click();
-    await page.waitForTimeout(1200);
-    await page.screenshot({ path: `${OUT}/${size.name}-2-question1.png` });
+    await page.locator('[data-scene="question1"]').waitFor();
+    await page.waitForTimeout(500);
+    await page.screenshot({ path: `${OUT}/${size.name}-2-question1-unrevealed.png` });
+    await scrubTo(page, 0.45);
+    await page.screenshot({ path: `${OUT}/${size.name}-3-question1-scrubbing.png` });
+    await scrubTo(page, 1);
+    await page.screenshot({ path: `${OUT}/${size.name}-4-question1-revealed.png` });
 
     await page.locator('[data-scene="question1"] [data-action="advance"]').click();
-    await page.waitForTimeout(1200);
-    await page.screenshot({ path: `${OUT}/${size.name}-3-question2.png` });
+    await page.locator('[data-scene="question2"]').waitFor();
+    await scrubTo(page, 0.5);
+    await page.screenshot({ path: `${OUT}/${size.name}-5-question2-scrubbing.png` });
 
     await page.locator('[data-scene="question2"] [data-action="advance"]').click();
     await page.locator('[data-scene="words"]').waitFor();
 
     // The longest word, captured on a settled frame rather than mid-reveal.
     await waitForSettledWord(page, 'Discernment');
-    await page.screenshot({ path: `${OUT}/${size.name}-4-longest-word.png` });
+    await page.screenshot({ path: `${OUT}/${size.name}-6-longest-word.png` });
 
     // Final D.
     await page.locator('[data-scene="final"]').waitFor({ timeout: 12_000 });
     await page.waitForTimeout(900);
-    await page.screenshot({ path: `${OUT}/${size.name}-5-final-d.png` });
+    await page.screenshot({ path: `${OUT}/${size.name}-7-final-d.png` });
   });
 }
 
@@ -57,8 +64,9 @@ test('capture Chinese scenes at 390x844', async ({ page }) => {
   await openEntrance(page);
   await page.locator('.d-entrance[data-media="ready"]').waitFor();
   await page.locator('.d-language__option[data-locale="zh-Hant"]').click();
-  await page.waitForTimeout(1200);
-  await page.screenshot({ path: `${OUT}/390x844-zh-Hant-question1.png` });
+  await page.locator('[data-scene="question1"]').waitFor();
+  await scrubTo(page, 0.45);
+  await page.screenshot({ path: `${OUT}/390x844-zh-Hant-question1-scrubbing.png` });
 
   await reachWordsFromQuestion1(page);
   await waitForSettledWord(page, 'Discernment');

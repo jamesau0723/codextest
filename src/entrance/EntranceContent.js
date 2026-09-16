@@ -18,17 +18,40 @@ import {
   wordTranslation
 } from './EntranceContentData.js';
 
-const GRAPHEME_SEGMENTER =
-  typeof Intl !== 'undefined' && typeof Intl.Segmenter === 'function'
-    ? new Intl.Segmenter(undefined, { granularity: 'grapheme' })
-    : null;
+const wordSegmenters = new Map();
 
-/** Split by grapheme, not by raw code units, so typing never splits a cluster. */
-export function graphemes(text) {
-  if (GRAPHEME_SEGMENTER) {
-    return Array.from(GRAPHEME_SEGMENTER.segment(text), (segment) => segment.segment);
+function wordSegmenter(locale) {
+  if (typeof Intl === 'undefined' || typeof Intl.Segmenter !== 'function') return null;
+  if (!wordSegmenters.has(locale)) {
+    wordSegmenters.set(locale, new Intl.Segmenter(locale, { granularity: 'word' }));
   }
-  return Array.from(text);
+  return wordSegmenters.get(locale);
+}
+
+/**
+ * Split text into reveal units.
+ *
+ * Word granularity rather than grapheme: the reveal is word-by-word. Chinese
+ * has no spaces, so Intl.Segmenter does the real work there, yielding
+ * 上一次 / 被 / 音樂 / 打動 rather than one character at a time.
+ *
+ * Returns { text, isWord } segments; whitespace and punctuation come back as
+ * non-word segments so they can render as plain text and keep normal
+ * line-breaking behaviour.
+ */
+export function segmentWords(text, locale) {
+  const segmenter = wordSegmenter(locale);
+  if (segmenter) {
+    return Array.from(segmenter.segment(text), (segment) => ({
+      text: segment.segment,
+      isWord: Boolean(segment.isWordLike)
+    }));
+  }
+  // Fallback: split on whitespace, keeping the separators.
+  return text
+    .split(/(\s+)/)
+    .filter((part) => part !== '')
+    .map((part) => ({ text: part, isWord: !/^\s+$/.test(part) }));
 }
 
 export class EntranceContent {
@@ -90,6 +113,9 @@ export class EntranceContent {
     }
     panel.classList.add('is-entering');
     this.container.appendChild(panel);
+    // Every scene starts at the top of the scrollport, so an outgoing
+    // scroll-scrub scene cannot leave the next one scrolled part-way down.
+    this.container.scrollTop = 0;
     // Force a style flush so the entering transition actually runs.
     void panel.offsetWidth;
     panel.classList.remove('is-entering');
@@ -141,9 +167,20 @@ export class EntranceContent {
   }
 
   /**
-   * Scenes 2 and 3 — a typed question with an always-available advance control.
-   * The full question is exposed to assistive technology once; the per-grapheme
-   * layer is decorative.
+   * Scenes 2 and 3 — a scroll-scrubbed question with an always-available
+   * advance control.
+   *
+   * Structure: a tall track supplies the scroll distance, and a sticky pin
+   * holds the text at the exact centre of the viewport for the whole scrub, so
+   * the spec's centring requirement survives the scroll interaction.
+   *
+   *   .d-scene--scroll
+   *     .d-scroll-track    height = one viewport + the scrub distance
+   *       .d-scroll-pin    sticky, one viewport tall, content centred
+   *
+   * The complete question is exposed to assistive technology once; the
+   * per-word layer is decorative. Reveal state is purely a function of scroll
+   * position — no timers, no intervals, nothing time-based.
    */
   renderQuestion(index, { onAdvance }) {
     const copy = this.copy;
@@ -163,20 +200,51 @@ export class EntranceContent {
     semantic.textContent = text;
     heading.appendChild(semantic);
 
-    const typing = document.createElement('span');
-    typing.className = 'd-type';
-    typing.setAttribute('aria-hidden', 'true');
+    const reveal = document.createElement('span');
+    reveal.className = 'd-reveal';
+    reveal.setAttribute('aria-hidden', 'true');
 
-    const cells = graphemes(text).map((grapheme) => {
+    const words = [];
+    for (const segment of segmentWords(text, this.locale)) {
+      if (!segment.isWord) {
+        if (/^\s+$/.test(segment.text)) {
+          // Whitespace stays a text node, so wrapping behaves exactly as it
+          // would in an ordinary paragraph.
+          reveal.appendChild(document.createTextNode(segment.text));
+        } else if (words.length > 0) {
+          // Punctuation rides with the word it belongs to. Left on its own it
+          // would sit at full brightness beside a still-blurred word, and could
+          // wrap onto a line by itself — "you ?" and "時候 ？".
+          words[words.length - 1].textContent += segment.text;
+        } else {
+          // Leading punctuation has no word to join; give it its own unit.
+          const span = document.createElement('span');
+          span.className = 'd-reveal__w';
+          span.textContent = segment.text;
+          reveal.appendChild(span);
+          words.push(span);
+        }
+        continue;
+      }
       const span = document.createElement('span');
-      span.className = 'd-type__g';
-      // A space must still occupy its advance width while hidden.
-      span.textContent = grapheme;
-      typing.appendChild(span);
-      return span;
-    });
+      span.className = 'd-reveal__w';
+      span.textContent = segment.text;
+      reveal.appendChild(span);
+      words.push(span);
+    }
 
-    heading.appendChild(typing);
+    heading.appendChild(reveal);
+
+    // Scroll affordance in the eyebrow position above the question. Without it
+    // a scroll-driven reveal is undiscoverable. It fades for good once the
+    // scrub starts.
+    const cue = document.createElement('p');
+    cue.className = 'd-scroll-cue';
+    cue.lang = copy.htmlLang;
+    cue.setAttribute('aria-hidden', 'true');
+    cue.textContent = copy.scrollCue;
+
+    main.appendChild(cue);
     main.appendChild(heading);
 
     const advance = document.createElement('button');
@@ -185,49 +253,93 @@ export class EntranceContent {
     advance.dataset.action = 'advance';
     advance.lang = copy.htmlLang;
     advance.textContent = copy.continue;
-    // Available immediately: advancing works even while the text is typing.
+    // Available immediately at any scroll position: the reveal is never a gate.
     advance.addEventListener('click', onAdvance);
     main.appendChild(advance);
 
-    panel.appendChild(main);
+    if (this.reducedMotion) {
+      // Reduced motion shows the question in full at once and asks for no
+      // scrolling.
+      cue.hidden = true;
+      panel.appendChild(main);
+      for (const word of words) {
+        word.style.opacity = '1';
+        word.style.filter = 'none';
+      }
+      this.swap(panel);
+      return { panel, heading, words, scroller: null, progress: 1, revealed: true };
+    }
+
+    panel.classList.add('d-scene--scroll');
+
+    const track = document.createElement('div');
+    track.className = 'd-scroll-track';
+
+    const pin = document.createElement('div');
+    pin.className = 'd-scroll-pin';
+    pin.appendChild(main);
+    track.appendChild(pin);
+    panel.appendChild(track);
+
     this.swap(panel);
 
-    if (this.reducedMotion) {
-      // Reduced motion shows the question in full immediately, with no caret.
-      for (const cell of cells) cell.classList.add('is-shown');
-      return { panel, heading, cells, typed: true };
-    }
+    const state = {
+      panel,
+      heading,
+      words,
+      cue,
+      track,
+      pin,
+      scroller: this.container,
+      progress: -1,
+      revealed: false
+    };
 
-    for (const cell of cells) cell.classList.remove('is-shown');
-    return { panel, heading, cells, typed: false };
+    // Apply the unrevealed values before the first frame, so the scene never
+    // flashes fully-revealed text on entry.
+    this.applyReveal(state, 0);
+    // Each scene starts its own scrub from the top.
+    this.container.scrollTop = 0;
+    return state;
   }
 
-  /** Reveal typed text for an elapsed time. Idempotent and pause-safe. */
-  updateTyping(state, elapsed) {
-    if (!state || state.typed) return true;
-    const total = state.cells.length;
-    if (total === 0) return true;
-    const progress = Math.min(1, elapsed / TIMING.typing);
-    const shown = Math.round(progress * total);
-    for (let i = 0; i < total; i += 1) {
-      const cell = state.cells[i];
-      const visible = i < shown;
-      cell.classList.toggle('is-shown', visible);
-      // A thin caret follows the revealed text and disappears when complete.
-      cell.classList.toggle('has-caret', visible && i === shown - 1 && progress < 1);
-    }
-    if (progress >= 1) state.typed = true;
+  /**
+   * Map scroll position to reveal progress and apply it.
+   *
+   * progress = scrollTop / (track height - pin height): 0 when the scene is
+   * untouched, 1 once the track has been scrubbed through. Each word occupies
+   * a staggered window inside that range.
+   */
+  updateScrollReveal(state) {
+    if (!state || !state.scroller || state.revealed) return true;
+    const distance = state.track.offsetHeight - state.pin.offsetHeight;
+    const progress = distance > 0 ? clamp(state.scroller.scrollTop / distance, 0, 1) : 1;
+    // Nothing moved: skip the style writes entirely.
+    if (Math.abs(progress - state.progress) < 0.0005) return progress >= 1;
+    this.applyReveal(state, progress);
     return progress >= 1;
   }
 
-  /** Immediately complete typing — used when pausing, so text stays readable. */
-  completeTyping(state) {
-    if (!state || state.typed) return;
-    for (const cell of state.cells) {
-      cell.classList.add('is-shown');
-      cell.classList.remove('has-caret');
+  applyReveal(state, progress) {
+    state.progress = progress;
+    const total = state.words.length;
+    const span = TIMING.scrubWindow;
+    const spread = 1 - span;
+
+    for (let i = 0; i < total; i += 1) {
+      const start = total > 1 ? (i / (total - 1)) * spread : 0;
+      const t = clamp((progress - start) / span, 0, 1);
+      const word = state.words[i];
+      word.style.opacity = (
+        TIMING.revealOpacityFrom + (1 - TIMING.revealOpacityFrom) * t
+      ).toFixed(3);
+      const blur = TIMING.revealBlurFrom * (1 - t);
+      // Drop the filter entirely once a word is readable: a blur filter across
+      // a dozen inline boxes is real compositing work on a phone.
+      word.style.filter = blur < 0.05 ? 'none' : `blur(${blur.toFixed(2)}px)`;
     }
-    state.typed = true;
+
+    if (state.cue) state.cue.classList.toggle('is-gone', progress > 0.02);
   }
 
   /** Scene 4A — the ten-word passage. */
@@ -518,6 +630,10 @@ function applyFinalVisual(state, dissolve, reveal) {
   state.awn.style.marginRight = `calc(var(--awn-width, 0px) * -${dissolve})`;
   if (state.zh && !state.zh.hidden) state.zh.style.opacity = String(1 - dissolve);
   state.festival.style.opacity = String(reveal);
+}
+
+function clamp(value, min, max) {
+  return value < min ? min : value > max ? max : value;
 }
 
 let idCounter = 0;

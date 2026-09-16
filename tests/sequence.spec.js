@@ -2,7 +2,7 @@
  * Scene content, order and timing (spec 2, 3; acceptance 1–9, 27).
  */
 import { test, expect } from '@playwright/test';
-import { openEntrance, reachWords } from './helpers.js';
+import { openEntrance, reachWords, scrubTo, revealState } from './helpers.js';
 
 const WORDS = ['Doubt', 'Desire', 'Discipline', 'Devotion', 'Dialogue',
                'Daring', 'Discernment', 'Discovery', 'Depth', 'Dawn'];
@@ -45,8 +45,8 @@ test('language choice changes entrance copy and website content', async ({ page 
   await expect(page.locator('[data-scene="question1"] .sr-only').first())
     .toHaveText('上一次被音樂打動，是甚麼時候？');
   await expect(page.locator('[data-scene="question1"] [data-action="advance"]')).toHaveText('繼續');
-  await expect(page.locator('.d-entrance__skip')).toHaveText('略過');
   await expect(page.locator('.d-entrance__hint')).toHaveText('長按任意位置 1.5 秒即可略過');
+  await expect(page.locator('.d-scroll-cue')).toHaveText('向下捲動閱讀');
 
   // The website underneath, not just the entrance labels.
   expect(await page.getAttribute('html', 'lang')).toBe('zh-Hant');
@@ -79,22 +79,28 @@ test('questions are user-paced: no automatic advancement', async ({ page }) => {
   await openEntrance(page);
   await page.locator('.d-language__option[data-locale="en"]').click();
   await page.locator('[data-scene="question1"]').waitFor();
-  // Well past the 1000ms typing duration.
   await page.waitForTimeout(4000);
+  await expect(page.locator('[data-scene="question1"]')).toBeVisible();
+  expect(await page.locator('[data-scene="question2"]').count()).toBe(0);
+
+  // A fully scrubbed reveal still does not advance on its own.
+  await scrubTo(page, 1);
+  await page.waitForTimeout(800);
   await expect(page.locator('[data-scene="question1"]')).toBeVisible();
   expect(await page.locator('[data-scene="question2"]').count()).toBe(0);
 });
 
-test('Continue works while the question is still typing, in one tap', async ({ page }) => {
+test('Continue works at any scroll position, in one tap', async ({ page }) => {
   await openEntrance(page);
   await page.locator('.d-language__option[data-locale="en"]').click();
   await page.locator('[data-scene="question1"]').waitFor();
 
-  // Click immediately — typing has not finished.
-  const stillTyping = await page.evaluate(
-    () => document.querySelectorAll('.d-type__g:not(.is-shown)').length > 0
+  // Click immediately — the reveal has not been scrubbed at all, so the reveal
+  // is never a gate on advancing.
+  const unrevealed = await page.evaluate(
+    () => Number(getComputedStyle(document.querySelector('.d-reveal__w')).opacity)
   );
-  expect(stillTyping).toBe(true);
+  expect(unrevealed).toBeCloseTo(0.2, 2);
 
   await page.locator('[data-scene="question1"] [data-action="advance"]').click();
   await expect(page.locator('[data-scene="question2"]')).toBeVisible();
@@ -112,18 +118,63 @@ test('short taps on the empty background do nothing', async ({ page }) => {
   expect(await page.locator('[data-scene="question2"]').count()).toBe(0);
 });
 
-test('typing reveals by grapheme and the caret disappears when complete', async ({ page }) => {
+test('the question reveals word-by-word, scrubbed by scroll position', async ({ page }) => {
+  await openEntrance(page);
+  await page.locator('.d-language__option[data-locale="en"]').click();
+  await page.locator('[data-scene="question1"]').waitFor();
+
+  // Unrevealed state: every word starts at opacity 0.2 and blur(4px).
+  const initial = await revealState(page);
+  expect(initial.map((word) => word.text)).toEqual(['When', 'did', 'music', 'last', 'move', 'you?']);
+  for (const word of initial) {
+    expect(word.opacity, `${word.text} starts faded`).toBeCloseTo(0.2, 2);
+    expect(word.blur, `${word.text} starts blurred`).toBeCloseTo(4, 1);
+  }
+
+  // Nothing is time-driven: waiting changes nothing at all.
+  await page.waitForTimeout(1600);
+  expect(await revealState(page)).toEqual(initial);
+
+  // Part-way through the scrub the reveal is a monotonic cascade: earlier words
+  // are never less revealed than later ones.
+  await scrubTo(page, 0.45);
+  const mid = await revealState(page);
+  for (let i = 1; i < mid.length; i += 1) {
+    expect(mid[i - 1].opacity, `word ${i - 1} leads word ${i}`).toBeGreaterThanOrEqual(mid[i].opacity - 0.001);
+    expect(mid[i - 1].blur, `word ${i - 1} clearer than word ${i}`).toBeLessThanOrEqual(mid[i].blur + 0.001);
+  }
+  expect(mid[0].opacity).toBeGreaterThan(initial[0].opacity);
+  expect(mid[mid.length - 1].opacity).toBeLessThan(1);
+
+  // Fully scrubbed: every word at opacity 1 and no blur.
+  await scrubTo(page, 1);
+  for (const word of await revealState(page)) {
+    expect(word.opacity, `${word.text} fully revealed`).toBe(1);
+    expect(word.blur, `${word.text} unblurred`).toBe(0);
+  }
+
+  // Scrubbing back reverses it — the reveal tracks scroll, it does not latch.
+  await scrubTo(page, 0);
+  for (const word of await revealState(page)) {
+    expect(word.opacity).toBeCloseTo(0.2, 2);
+    expect(word.blur).toBeCloseTo(4, 1);
+  }
+});
+
+test('Chinese reveals by word, not by character, with punctuation attached', async ({ page }) => {
   await openEntrance(page);
   await page.locator('.d-language__option[data-locale="zh-Hant"]').click();
   await page.locator('[data-scene="question1"]').waitFor();
 
-  const total = await page.locator('.d-type__g').count();
-  // 「上一次被音樂打動，是甚麼時候？」 is 15 graphemes.
-  expect(total).toBe(15);
-
-  await page.waitForTimeout(1400);
-  expect(await page.locator('.d-type__g.is-shown').count()).toBe(total);
-  expect(await page.locator('.d-type__g.has-caret').count()).toBe(0);
+  const words = (await revealState(page)).map((word) => word.text);
+  // Intl.Segmenter word granularity: 音樂 and 打動 are single units, not four
+  // separate characters, and the comma rides with the word before it.
+  expect(words).toContain('音樂');
+  expect(words).toContain('打動，');
+  expect(words).toContain('時候？');
+  expect(words.join('')).toBe('上一次被音樂打動，是甚麼時候？');
+  // Far fewer units than the 15 characters a per-character reveal would give.
+  expect(words.length).toBeLessThan(12);
 });
 
 test('the ten words appear once, in order, with the right spelling', async ({ page }) => {

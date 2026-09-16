@@ -2,17 +2,7 @@
  * Hold-anywhere-to-skip (spec 6; acceptance 10–16).
  */
 import { test, expect } from '@playwright/test';
-import { openEntrance, reachWords, resetEntranceState } from './helpers.js';
-
-const CENTRE = { x: 640, y: 200 };
-
-async function backgroundPoint(page) {
-  // A point on the entrance that is not over any control.
-  return page.evaluate(() => {
-    const skip = document.querySelector('.d-entrance__skip').getBoundingClientRect();
-    return { x: Math.round(skip.left - 60), y: Math.round(window.innerHeight * 0.22) };
-  });
-}
+import { openEntrance, reachWords, resetEntranceState, backgroundPoint, exitEntrance } from './helpers.js';
 
 test('a 1499ms background hold does not skip', async ({ page }) => {
   await openEntrance(page);
@@ -222,7 +212,7 @@ test('a completed hold does not click the homepage underneath', async ({ page })
   expect(await page.evaluate(() => window.__homepageClicks)).toBe(0);
 });
 
-test('skip, hold and Enter cannot double-navigate or double-write storage', async ({ page }) => {
+test('repeated exits cannot double-navigate or double-write storage', async ({ page }) => {
   await openEntrance(page);
   await page.evaluate(() => {
     window.__writes = [];
@@ -233,8 +223,8 @@ test('skip, hold and Enter cannot double-navigate or double-write storage', asyn
     };
   });
 
-  // Fire Skip, Escape and a hold commit in quick succession.
-  await page.locator('.d-entrance__skip').click();
+  // Fire Escape repeatedly in quick succession.
+  await page.keyboard.press('Escape');
   await page.keyboard.press('Escape');
   await page.keyboard.press('Escape');
   await page.waitForTimeout(500);
@@ -256,91 +246,97 @@ test('right mouse-button holds are not intercepted', async ({ page }) => {
   expect(await page.locator('.d-entrance__hold').getAttribute('data-state')).toBe('idle');
 });
 
-test('skip works from every scene, including paused and media-failure modes', async ({ page }) => {
-  // Language scene.
+test('the hold hint appears only after a language is chosen, then fades away', async ({ page }) => {
   await openEntrance(page);
-  await page.locator('.d-entrance__skip').click();
-  await expect(page.locator('.d-entrance')).toHaveCount(0, { timeout: 3000 });
 
-  // Mid-typing. Each scenario needs a fresh visit, so clear the saved outcome.
-  await resetEntranceState(page);
-  await openEntrance(page);
+  // Not shown during the language scene.
+  const hint = page.locator('.d-entrance__hint');
+  expect(await hint.getAttribute('data-state')).toBe('idle');
+  expect(await hint.evaluate((node) => Number(getComputedStyle(node).opacity))).toBe(0);
+
   await page.locator('.d-language__option[data-locale="en"]').click();
-  await page.locator('.d-entrance__skip').click();
-  await expect(page.locator('.d-entrance')).toHaveCount(0, { timeout: 3000 });
 
-  // Word passage, while paused.
-  await resetEntranceState(page);
-  await openEntrance(page);
-  await reachWords(page, 'en');
-  await page.locator('.d-entrance__pause').click();
-  await expect(page.locator('.d-entrance__skip')).toBeEnabled();
-  await page.locator('.d-entrance__skip').click();
-  await expect(page.locator('.d-entrance')).toHaveCount(0, { timeout: 3000 });
+  // Revealed as soon as the language is chosen, fading in over ~320ms.
+  expect(await hint.getAttribute('data-state')).toBe('visible');
+  await expect(hint).toHaveText('Hold anywhere for 1.5s to skip');
+  await expect
+    .poll(async () => hint.evaluate((node) => Number(getComputedStyle(node).opacity)), {
+      timeout: 1500,
+      intervals: [50]
+    })
+    .toBe(1);
 
-  // Media-failure mode.
-  await resetEntranceState(page);
-  await openEntrance(page, { media: { master: { src: null, poster: null } } });
-  await expect(page.locator('.d-entrance__skip')).toBeEnabled();
-  await page.locator('.d-entrance__skip').click();
-  await expect(page.locator('.d-entrance')).toHaveCount(0, { timeout: 3000 });
-});
+  // Still there approaching the 2s hold, then fading.
+  await page.waitForTimeout(1000);
+  expect(await hint.getAttribute('data-state')).toBe('visible');
 
-test('pause freezes video and scene time without blocking advance or skip', async ({ page }) => {
-  await openEntrance(page);
-  await reachWords(page, 'en');
-  await page.locator('.d-entrance[data-media="ready"]').waitFor();
-  await page.waitForTimeout(1400);
+  await expect
+    .poll(async () => hint.getAttribute('data-state'), { timeout: 4000 })
+    .toBe('gone');
+  expect(await hint.evaluate((node) => node.hidden)).toBe(true);
 
-  await page.locator('.d-entrance__pause').click();
-  const frozen = await page.evaluate(() => ({
-    word: document.querySelector('.d-word__en').textContent,
-    videoPaused: document.querySelector('.d-entrance__video').paused,
-    videoTime: document.querySelector('.d-entrance__video').currentTime,
-    label: document.querySelector('.d-entrance__pause').textContent
-  }));
-
-  expect(frozen.videoPaused).toBe(true);
-  expect(frozen.label).toBe('Resume motion');
-
-  await page.waitForTimeout(1600);
-  const still = await page.evaluate(() => ({
-    word: document.querySelector('.d-word__en').textContent,
-    videoTime: document.querySelector('.d-entrance__video').currentTime
-  }));
-  expect(still.word).toBe(frozen.word);
-  expect(Math.abs(still.videoTime - frozen.videoTime)).toBeLessThan(0.1);
-
-  // Enter D still works while paused.
-  await expect(page.locator('[data-action="enter"]')).toBeEnabled();
-
-  // Resuming continues rather than restarting.
-  await page.locator('.d-entrance__pause').click();
-  await page.waitForTimeout(1400);
-  const resumed = await page.evaluate(() => document.querySelector('.d-word__en').textContent);
-  expect(resumed).not.toBe(frozen.word);
-});
-
-test('pausing completes already-typed text so it stays readable', async ({ page }) => {
-  await openEntrance(page);
-  await page.locator('.d-language__option[data-locale="en"]').click();
-  await page.locator('[data-scene="question1"]').waitFor();
-  await page.locator('.d-entrance__pause').click();
-
-  const hidden = await page.locator('.d-type__g:not(.is-shown)').count();
-  expect(hidden).toBe(0);
-  expect(await page.locator('.d-type__g.has-caret').count()).toBe(0);
-});
-
-test('pause state persists across scenes', async ({ page }) => {
-  await openEntrance(page);
-  await page.locator('.d-language__option[data-locale="en"]').click();
-  await page.locator('[data-scene="question1"]').waitFor();
-  await page.locator('.d-entrance__pause').click();
-
+  // It does not come back in a later scene.
   await page.locator('[data-scene="question1"] [data-action="advance"]').click();
   await page.locator('[data-scene="question2"]').waitFor();
+  await page.waitForTimeout(400);
+  expect(await hint.getAttribute('data-state')).toBe('gone');
+});
 
-  await expect(page.locator('.d-entrance__pause')).toHaveText('Resume motion');
-  expect(await page.locator('.d-entrance').getAttribute('data-paused')).toBe('true');
+test('the removed Skip and pause controls are absent', async ({ page }) => {
+  await openEntrance(page);
+  expect(await page.locator('.d-entrance__skip').count()).toBe(0);
+  expect(await page.locator('.d-entrance__pause').count()).toBe(0);
+  expect(await page.locator('[data-action="skip"]').count()).toBe(0);
+  expect(await page.locator('[data-action="pause"]').count()).toBe(0);
+});
+
+test('exit routes still work from every scene', async ({ page }) => {
+  // Language scene, via Escape.
+  await openEntrance(page);
+  await exitEntrance(page);
+  await expect(page.locator('.d-entrance')).toHaveCount(0, { timeout: 3000 });
+
+  // Question scene, via a completed hold.
+  await resetEntranceState(page);
+  await openEntrance(page);
+  await page.locator('.d-language__option[data-locale="en"]').click();
+  await page.locator('[data-scene="question1"]').waitFor();
+  const point = await backgroundPoint(page);
+  await page.mouse.move(point.x, point.y);
+  await page.mouse.down();
+  await page.waitForTimeout(1700);
+  await page.mouse.up();
+  await expect(page.locator('.d-entrance')).toHaveCount(0, { timeout: 3000 });
+
+  // Word passage, via Enter D.
+  await resetEntranceState(page);
+  await openEntrance(page);
+  await reachWords(page, 'en');
+  await page.locator('[data-action="enter"]').click();
+  await expect(page.locator('.d-entrance')).toHaveCount(0, { timeout: 3000 });
+  expect(await page.evaluate(() => localStorage.getItem('dFestival.entranceOutcome'))).toBe('completed');
+
+  // Media-failure mode, via Escape.
+  await resetEntranceState(page);
+  await openEntrance(page, { media: { master: { src: null, poster: null } } });
+  await exitEntrance(page);
+  await expect(page.locator('.d-entrance')).toHaveCount(0, { timeout: 3000 });
+});
+
+test('a hold freezes the background video and a cancel restores it', async ({ page }) => {
+  await openEntrance(page);
+  await page.locator('.d-entrance[data-media="ready"]').waitFor();
+  await page.waitForTimeout(500);
+
+  const point = await backgroundPoint(page);
+  await page.mouse.move(point.x, point.y);
+  await page.mouse.down();
+  await page.waitForTimeout(500);
+
+  expect(await page.evaluate(() => document.querySelector('.d-entrance__video').paused)).toBe(true);
+
+  await page.mouse.up(); // released early: cancel
+  await page.waitForTimeout(300);
+  // Playback resumes, because nothing else had paused it.
+  expect(await page.evaluate(() => document.querySelector('.d-entrance__video').paused)).toBe(false);
 });

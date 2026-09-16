@@ -61,21 +61,86 @@ revisited — nothing else depends on this reading.**
 
 ---
 
+## 1.4 Client-directed deviations from spec v2.0
+
+Four changes were requested after the spec was implemented. They are genuine
+departures from the authoritative document, recorded here so nobody later reads
+the spec and assumes the build matches it.
+
+| # | Change | Spec it departs from | Consequence |
+|---|---|---|---|
+| A | Typewriter questions replaced by a **scroll-scrubbed word reveal** | §2 (1,000 ms typing), §3 | Reading the question now requires scrolling |
+| B | **Skip control removed** (top right) | §2, §5, §8, acceptance 10 | One of four exit routes is gone |
+| C | **Pause/resume control removed** (bottom left) | §5, acceptance 18 | See the accessibility note below |
+| D | Hold hint made **transient** — appears after the language choice, holds 2 s, fades | §5 (persistent hint) | The remaining shortcut is advertised only briefly |
+
+### These two are worth a second look
+
+**Removing pause is an accessibility regression.** WCAG 2.2.2 (Pause, Stop,
+Hide) asks for a pause mechanism for motion that starts automatically and runs
+more than five seconds. The entrance has exactly that: a looping background
+video and a 12.2-second word passage. The pause control was the mechanism, and
+it is now gone. What still mitigates it: `prefers-reduced-motion` is fully
+honoured (no video is fetched at all, and the timed passage becomes a static
+list), and playback still freezes on a hidden tab and during a hold. The
+underlying `setPaused` machinery is intact, so restoring the button is a small
+change if you want it back.
+
+**Removing Skip narrows the exit routes, but does not trap anyone.** What
+remains: the 1,500 ms hold anywhere, Escape, Continue through both questions,
+and Enter D. Since the hint now shows for only two seconds, a visitor who
+misses it is left with the visible Continue and Enter D buttons — still a
+complete path out, just a slower one. Nobody is stuck.
+
+Neither change was blocked, because neither makes the entrance unusable and
+both are the client's call. They are flagged, not overridden.
+
+### How the scroll reveal preserves the centring rule
+
+The spec requires the question centred at x=50%, y=50% of the viewport. A
+scroll interaction would normally break that. The implementation keeps it: a
+tall `.d-scroll-track` supplies the scroll distance while a `position: sticky`
+`.d-scroll-pin`, exactly one viewport tall, holds the text at dead centre for
+the whole scrub. This is asserted at four scrub positions across three
+viewports.
+
+Reveal values follow the request exactly: each word starts at `opacity: 0.2`
+with `filter: blur(4px)` and ends at `opacity: 1`, `filter: none`, with a
+staggered window so the cascade overlaps rather than stepping. Nothing is
+time-driven — a test asserts that waiting 1.6 s with no scrolling changes
+nothing at all, and that scrubbing backwards reverses the reveal.
+
+Chinese is segmented with `Intl.Segmenter` at word granularity, so it reveals
+音樂 / 打動 as units rather than one character at a time; punctuation rides with
+the word before it.
+
+### Stack note
+
+The supplied prompt specified Next.js, React and Framer Motion
+(`useScroll`/`useTransform`). This project is vanilla ES modules with no React,
+and spec §10 forbids adding an application framework for the entrance. The
+described effect was therefore built on the existing shared
+`requestAnimationFrame` loop, which reads `scrollTop` and writes the two
+properties directly — the same result Framer Motion's scroll transforms
+produce, without the dependency.
+
+---
+
 ## 2. Test results
 
 Command: `npm test` (Playwright). Full log: [`docs/test-run.txt`](./test-run.txt).
-Last run: **110 passed, 0 failed** in 2.6 minutes.
+Last run: **112 passed, 0 failed** in 2.6 minutes.
 
 | Suite | Tests | Result |
 |---|---|---|
-| `viewport.spec.js` — responsive matrix, cover geometry, rotation, zoom | 36 | pass |
-| `sequence.spec.js` — scenes, languages, ten words, final D | 14 | pass |
-| `hold.spec.js` — gesture thresholds, cancellation, pause | 17 | pass |
+| `viewport.spec.js` — responsive matrix, cover geometry, scrub track, rotation, zoom | 37 | pass |
+| `sequence.spec.js` — scenes, languages, scroll reveal, ten words, final D | 15 | pass |
+| `hold.spec.js` — gesture thresholds, cancellation, transient hint | 17 | pass |
 | `a11y.spec.js` — reduced motion, focus, keyboard, contrast | 12 | pass |
 | `fallbacks.spec.js` — media failure, storage, routing, cleanup | 15 | pass |
 | `locale.spec.js` — provisional language resolution, shape buckets | 6 | pass |
 | `screenshots.spec.js` — evidence capture | 10 | pass |
-| **Total** | **110** | **all passing** |
+| **Total** | **112** | **all passing** |
 
 ### Browser actually used
 
@@ -138,18 +203,20 @@ decoded and the pixels inspected (`tests/png.js`):
   hidden document, and viewport change — none navigate, all restore the exact
   pre-hold scene time.
 - A completed hold does **not** click the homepage underneath (counted: 0).
-- Skip, Escape and Enter racing each other produce exactly **one** storage
-  write and one navigation.
+- Repeated exits racing each other produce exactly **one** storage write and
+  one navigation.
 - Right mouse-button holds are not intercepted.
 - Rotation mid-passage preserves scene, language, pause state and media
   position; the video is not reloaded and the timeline does not restart.
 - Exactly **one** media source is requested per entrance session, across two
   rotations.
-- Pause freezes video and scene time together, completes typed text, persists
-  across scenes, and never blocks Continue/Enter/Skip.
-- Reduced motion: no video fetched at all, questions shown in full, the timed
-  passage replaced by a static ten-word list, a static hold label instead of a
-  filling ring.
+- The hold hint is absent during language choice, appears on selection, holds,
+  then fades to `hidden` and never returns.
+- The question reveal is monotonic across words, reverses on scrolling back,
+  and does not move when time passes.
+- Reduced motion: no video fetched at all, questions shown in full with no
+  scrub track and no scrolling required, the timed passage replaced by a static
+  ten-word list, a static hold label instead of a filling ring.
 - Normal entry hands the still-playing video to the homepage — the timeline
   continues rather than restarting.
 
@@ -163,7 +230,7 @@ they are not evidence about the real crop composition.
 
 | Group | Files |
 |---|---|
-| Full sequence at the three required sizes | `390x844-phone-*`, `820x1180-tablet-*`, `1440x900-desktop-*` (language, both questions, longest word, final D) |
+| Full sequence at the three required sizes | `390x844-phone-*`, `820x1180-tablet-*`, `1440x900-desktop-*` — language, question 1 **unrevealed / scrubbing / revealed**, question 2 scrubbing, longest word, final D |
 | Chinese scripts | `390x844-zh-Hant-*`, `1440x900-zh-Hans-word-with-translation.png` |
 | Portrait→landscape rotation | `rotation-1-portrait-390x844.png`, `rotation-2-landscape-844x390.png` |
 | Crop previews, scrim removed | `crop-preview-{narrow,balanced,wide,ultrawide}-*.png` |
@@ -236,7 +303,7 @@ Emulation is **not** treated as equivalent to real-device verification.
 ```bash
 npm install
 npm run fixtures     # regenerate synthetic fixtures
-npm test             # 110 tests
+npm test             # 112 tests
 npx playwright test tests/screenshots.spec.js   # regenerate evidence
 ```
 

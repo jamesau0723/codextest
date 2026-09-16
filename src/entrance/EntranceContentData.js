@@ -21,11 +21,13 @@ export const COPY = {
     question1: 'When did music last move you?',
     question2: 'What turns notes into music?',
     continue: 'Continue',
-    skip: 'Skip',
     enter: 'Enter D',
+    scrollCue: 'Scroll to read',
     holdHint: 'Hold anywhere for 1.5s to skip',
     holdProgress: 'Keep holding to skip',
     holdThreshold: 'Release to enter',
+    // Retained for reference only: the pause/resume control was removed at the
+    // client's request. See docs/HANDOFF.md section 7.
     pause: 'Pause motion',
     resume: 'Resume motion',
     replay: 'Replay entrance',
@@ -39,8 +41,8 @@ export const COPY = {
     question1: '上一次被音樂打動，是甚麼時候？',
     question2: '是甚麼，讓音符成為音樂？',
     continue: '繼續',
-    skip: '略過',
     enter: '進入 D',
+    scrollCue: '向下捲動閱讀',
     holdHint: '長按任意位置 1.5 秒即可略過',
     holdProgress: '繼續長按即可略過',
     holdThreshold: '放開即可進入',
@@ -57,8 +59,8 @@ export const COPY = {
     question1: '上一次被音乐打动，是什么时候？',
     question2: '是什么，让音符成为音乐？',
     continue: '继续',
-    skip: '跳过',
     enter: '进入 D',
+    scrollCue: '向下滚动阅读',
     holdHint: '长按任意位置 1.5 秒即可跳过',
     holdProgress: '继续长按即可跳过',
     holdThreshold: '松开即可进入',
@@ -98,7 +100,18 @@ export const LONGEST_WORD = WORDS.reduce(
 export const TIMING = {
   sceneTransition: 250,
   languageAppear: 200,
-  typing: 1000,
+  /**
+   * Scroll-scrub reveal. `scrubWindow` is the share of total scroll progress
+   * over which any single word travels from unrevealed to revealed; the
+   * remainder is spread across the words as staggered start points. A wider
+   * window overlaps more words at once and reads smoother.
+   */
+  scrubWindow: 0.35,
+  revealOpacityFrom: 0.2,
+  revealBlurFrom: 4,
+  /** Hold hint: appears once the language is chosen, then fades for good. */
+  hintVisible: 2000,
+  hintFade: 400,
   wordReveal: 200,
   wordHold: 800,
   wordDisappear: 200,

@@ -20,15 +20,21 @@
 
   --edge-x: 24px;
   --edge-y: 20px;
-  --control-h: 44px;
-  --foot-h: 56px;
+  --foot-h: 40px;
 
-  /* Room is reserved for the top and bottom control bands BEFORE deciding
-     whether content fits. The reserve is symmetric so the content centre stays
-     at exactly 50% / 50% of the viewport. */
-  --reserve-top: calc(var(--safe-t) + var(--edge-y) + var(--control-h) + 12px);
-  --reserve-bottom: calc(var(--safe-b) + var(--edge-y) + var(--foot-h) + 56px);
+  /* One token for the available viewport height, reused by the root box and by
+     the sticky scroll pin so they can never disagree. */
+  --viewport-h: var(--entrance-legacy-height, 100vh);
+
+  /* Room is reserved for the transient bottom hint and the hold ring BEFORE
+     deciding whether content fits. The reserve is symmetric so the content
+     centre stays at exactly 50% / 50% of the viewport. */
+  --reserve-top: calc(var(--safe-t) + var(--edge-y) + 16px);
+  --reserve-bottom: calc(var(--safe-b) + var(--edge-y) + var(--foot-h) + 52px);
   --content-reserve: max(var(--reserve-top), var(--reserve-bottom));
+  /* The scrub distance: how far you scroll to take a question from unrevealed
+     to fully revealed. */
+  --scrub-distance: calc(var(--viewport-h) * 1.15);
   --content-inline: calc(var(--edge-x) + max(var(--safe-l), var(--safe-r)));
 
   --font-display: 'Source Serif 4', 'Noto Serif TC', 'Noto Serif SC', Georgia,
@@ -49,7 +55,7 @@
   /* Conventional fallback first; the JS legacy variable is populated only in
      browsers without dvh, and the @supports block below wins where dvh works. */
   height: 100vh;
-  height: var(--entrance-legacy-height, 100vh);
+  height: var(--viewport-h);
   margin: 0;
   padding: 0;
   max-width: none;
@@ -65,8 +71,17 @@
 
 @supports (height: 100dvh) {
   .d-entrance {
+    --viewport-h: 100dvh;
     height: 100dvh;
   }
+}
+
+/* The entrance owns its own box model, independent of the host stylesheet. */
+.d-entrance,
+.d-entrance *,
+.d-entrance *::before,
+.d-entrance *::after {
+  box-sizing: border-box;
 }
 
 /* ── Media layers ───────────────────────────────────────────────────────────
@@ -128,7 +143,8 @@
   grid-template: 1fr / 1fr;
   place-items: center;
   place-items: safe center;
-  padding-block: var(--content-reserve);
+  /* No block padding here: a scroll-scrub scene needs its sticky pin flush with
+     the top of the scrollport. Normal scenes carry the reserve themselves. */
   padding-inline: var(--content-inline);
   /* Only the foreground scrolls at short heights or high zoom; the background
      and scrim stay full-viewport and stationary. */
@@ -140,9 +156,38 @@
 .d-scene {
   grid-area: 1 / 1;
   width: 100%;
+  /* Symmetric, so reserving room for the controls never moves the centre. */
+  padding-block: var(--content-reserve);
   opacity: 1;
   transition: opacity 250ms ease;
   text-align: center;
+}
+
+/* ── Scroll-scrub scenes (the two questions) ────────────────────────────────
+   The track supplies scroll distance; the pin keeps the text at the exact
+   centre of the viewport for the whole scrub. */
+
+.d-scene--scroll {
+  align-self: start;
+  padding-block: 0;
+}
+
+.d-scroll-track {
+  height: calc(var(--viewport-h) + var(--scrub-distance));
+  width: 100%;
+}
+
+.d-scroll-pin {
+  position: sticky;
+  top: 0;
+  height: var(--viewport-h);
+  width: 100%;
+  display: grid;
+  place-items: center;
+  place-items: safe center;
+  /* Symmetric inner reserve keeps the centre at 50% while leaving room for the
+     hint and hold ring. */
+  padding-block: var(--content-reserve);
 }
 
 .d-scene.is-entering { opacity: 0; }
@@ -229,25 +274,49 @@
   word-break: normal;
 }
 
-/* Hidden graphemes keep their layout box, so the block never jumps as it
-   types and the completed text's layout is reserved from the first frame. */
-.d-type__g {
-  position: relative;
-  visibility: hidden;
+/* Each word is an atomic inline-block so a filter can apply to it; spaces
+   between them keep ordinary wrapping. Both properties are written from
+   JavaScript on each scroll frame, so no transition is declared — the scroll
+   position IS the animation. */
+.d-reveal__w {
+  display: inline-block;
+  opacity: 0.2;
+  filter: blur(4px);
+  will-change: opacity, filter;
 }
 
-.d-type__g.is-shown { visibility: visible; }
-
-/* A thin white caret follows the revealed text. Zero layout width, so it
-   cannot shift the characters after it or create a line-break opportunity. */
-.d-type__g.has-caret::after {
-  content: '';
+/* Scroll affordance, in the eyebrow position above the question. */
+.d-scroll-cue {
   position: absolute;
-  right: -2px;
-  top: 0.12em;
-  width: 2px;
-  height: 1em;
-  background: #fff;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin: 0 0 24px;
+  font-family: var(--font-ui);
+  font-size: var(--size-hint);
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+  color: rgb(255 255 255 / 0.72);
+  opacity: 1;
+  transition: opacity 320ms ease;
+}
+
+.d-scroll-cue.is-gone { opacity: 0; }
+
+.d-scroll-cue::after {
+  content: '';
+  display: block;
+  width: 1px;
+  height: 18px;
+  margin: 8px auto 0;
+  background: linear-gradient(to bottom, rgb(255 255 255 / 0.72), transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .d-reveal__w {
+    opacity: 1 !important;
+    filter: none !important;
+  }
 }
 
 /* ── Scene 4A: the word passage ─────────────────────────────────────────── */
@@ -408,17 +477,10 @@
   outline-offset: 3px;
 }
 
-.d-button--compact { padding: 9px 14px; white-space: nowrap; }
-
-/* Skip keeps one fixed position in every scene and during transitions, clear
-   of notches and browser UI. It is never disabled. */
-.d-entrance__skip {
-  position: absolute;
-  top: calc(var(--safe-t) + var(--edge-y));
-  right: calc(var(--safe-r) + var(--edge-x));
-  z-index: 5;
-}
-
+/* The foot carries only the hold hint now: the Skip control (top right) and
+   the pause/resume control (bottom left) were removed at the client's request.
+   It is never interactive, so it never takes pointer events away from the
+   hold gesture underneath it. */
 .d-entrance__foot {
   position: absolute;
   left: 0;
@@ -426,39 +488,33 @@
   bottom: 0;
   z-index: 5;
   display: grid;
-  grid-template-columns: auto 1fr auto;
-  align-items: center;
-  gap: 12px;
+  justify-items: center;
   padding: 0 calc(var(--safe-r) + var(--edge-x)) calc(var(--safe-b) + var(--edge-y))
     calc(var(--safe-l) + var(--edge-x));
+  pointer-events: none;
 }
 
-.d-entrance__pause { grid-column: 1; justify-self: start; }
-
 .d-entrance__hint {
-  grid-column: 2;
-  justify-self: center;
   margin: 0;
   font-size: var(--size-hint);
   line-height: 1.35;
   color: #fff;
   text-align: center;
+  /* Appears only once the language is chosen, holds, then fades for good. */
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 320ms ease;
 }
 
-/* Adequate separation on small screens: the hint moves above the pause row
-   instead of crowding it. */
-@media (max-width: 560px) {
-  .d-entrance {
-    --foot-h: 96px;
-  }
+.d-entrance__hint[data-state='visible'] {
+  opacity: 1;
+  visibility: visible;
+}
 
-  .d-entrance__foot {
-    grid-template-columns: 1fr;
-    row-gap: 10px;
-  }
-
-  .d-entrance__hint { grid-row: 1; }
-  .d-entrance__pause { grid-row: 2; justify-self: start; }
+.d-entrance__hint[data-state='leaving'] {
+  opacity: 0;
+  visibility: visible;
+  transition-duration: 400ms;
 }
 
 /* Hold feedback: a fixed safe location above the bottom hint that never
@@ -532,6 +588,12 @@
     position: static;
     transform: none;
     margin-top: 22px;
+  }
+
+  .d-scroll-cue {
+    position: static;
+    transform: none;
+    margin: 0 0 14px;
   }
 
   .d-scene__main { padding-block: 4px; }

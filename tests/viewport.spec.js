@@ -2,7 +2,7 @@
  * Responsive full-viewport coverage contract (spec 7, acceptance 29–42).
  */
 import { test, expect } from '@playwright/test';
-import { openEntrance, expectCoversViewport, reachWords, FIXTURE_MEDIA } from './helpers.js';
+import { openEntrance, expectCoversViewport, reachWords, scrubTo, FIXTURE_MEDIA } from './helpers.js';
 import { decodePng, brightSpanX, brightSpanY, isBlackRow, isBlackColumn } from './png.js';
 
 const MATRIX = [
@@ -73,31 +73,30 @@ for (const size of MATRIX) {
     // No horizontal page scrollbar.
     expect(geometry.documentScrollWidth).toBeLessThanOrEqual(geometry.innerWidth + 1);
 
-    // Controls stay inside the viewport and keep a 44px target.
+    // Skip and pause were removed at the client's request; what remains must
+    // stay inside the viewport, with a 44px target on every real control.
     const controls = await page.evaluate(() => {
-      const out = {};
-      for (const [key, sel] of Object.entries({
-        skip: '.d-entrance__skip',
-        pause: '.d-entrance__pause',
-        hint: '.d-entrance__hint'
-      })) {
-        const node = document.querySelector(sel);
-        const rect = node.getBoundingClientRect();
-        out[key] = { top: rect.top, left: rect.left, right: rect.right, bottom: rect.bottom,
-                     width: rect.width, height: rect.height };
-      }
-      return out;
+      const rect = (node) => {
+        const r = node.getBoundingClientRect();
+        return { top: r.top, left: r.left, right: r.right, bottom: r.bottom,
+                 width: r.width, height: r.height };
+      };
+      return {
+        hint: rect(document.querySelector('.d-entrance__hint')),
+        options: Array.from(document.querySelectorAll('.d-language__option')).map(rect)
+      };
     });
 
-    for (const [key, rect] of Object.entries(controls)) {
-      expect(rect.top, `${key} top inside viewport`).toBeGreaterThanOrEqual(-0.5);
-      expect(rect.left, `${key} left inside viewport`).toBeGreaterThanOrEqual(-0.5);
-      expect(rect.right, `${key} right inside viewport`).toBeLessThanOrEqual(size.width + 0.5);
-      expect(rect.bottom, `${key} bottom inside viewport`).toBeLessThanOrEqual(size.height + 0.5);
+    for (const [key, box] of Object.entries({ hint: controls.hint, ...controls.options })) {
+      expect(box.top, `${key} top inside viewport`).toBeGreaterThanOrEqual(-0.5);
+      expect(box.left, `${key} left inside viewport`).toBeGreaterThanOrEqual(-0.5);
+      expect(box.right, `${key} right inside viewport`).toBeLessThanOrEqual(size.width + 0.5);
+      expect(box.bottom, `${key} bottom inside viewport`).toBeLessThanOrEqual(size.height + 0.5);
     }
-    expect(controls.skip.height).toBeGreaterThanOrEqual(44);
-    expect(controls.skip.width).toBeGreaterThanOrEqual(44);
-    expect(controls.pause.height).toBeGreaterThanOrEqual(44);
+    for (const option of controls.options) {
+      expect(option.height).toBeGreaterThanOrEqual(44);
+      expect(option.width).toBeGreaterThanOrEqual(44);
+    }
   });
 }
 
@@ -298,15 +297,9 @@ test('all ten words share one font size', async ({ page }) => {
   expect(sizes.size, `font sizes seen: ${[...sizes].join(', ')}`).toBe(1);
 });
 
-test('question is centred on the viewport, not on the video rectangle', async ({ page }) => {
-  for (const size of [{ width: 390, height: 844 }, { width: 820, height: 1180 }, { width: 1440, height: 900 }]) {
-    await page.setViewportSize(size);
-    await openEntrance(page);
-    await page.locator('.d-language__option[data-locale="en"]').click();
-    await page.locator('[data-scene="question1"]').waitFor();
-    await page.waitForTimeout(1100);
-
-    const offset = await page.evaluate(() => {
+test('the question stays centred on the viewport at every scroll position', async ({ page }) => {
+  const measure = () =>
+    page.evaluate(() => {
       const rect = document.querySelector('.d-scene__question').getBoundingClientRect();
       return {
         x: Math.abs((rect.left + rect.right) / 2 - window.innerWidth / 2),
@@ -314,17 +307,69 @@ test('question is centred on the viewport, not on the video rectangle', async ({
       };
     });
 
-    expect(offset.x, `x centred at ${size.width}x${size.height}`).toBeLessThanOrEqual(1.5);
-    expect(offset.y, `y centred at ${size.width}x${size.height}`).toBeLessThanOrEqual(1.5);
-  }
-});
-
-test('the advance control never overlaps the hold hint', async ({ page }) => {
-  for (const size of [{ width: 320, height: 568 }, { width: 844, height: 390 }, { width: 960, height: 540 }]) {
+  for (const size of [{ width: 390, height: 844 }, { width: 820, height: 1180 }, { width: 1440, height: 900 }]) {
     await page.setViewportSize(size);
     await openEntrance(page);
     await page.locator('.d-language__option[data-locale="en"]').click();
     await page.locator('[data-scene="question1"]').waitFor();
+
+    // The sticky pin must hold the text at the centre through the whole scrub,
+    // not just before scrolling starts.
+    for (const ratio of [0, 0.33, 0.66, 1]) {
+      await scrubTo(page, ratio);
+      const offset = await measure();
+      const label = `${size.width}x${size.height} at scrub ${ratio}`;
+      expect(offset.x, `x centred, ${label}`).toBeLessThanOrEqual(1.5);
+      expect(offset.y, `y centred, ${label}`).toBeLessThanOrEqual(1.5);
+    }
+  }
+});
+
+test('the scrub track gives real scroll distance and no horizontal overflow', async ({ page }) => {
+  for (const size of [{ width: 320, height: 568 }, { width: 430, height: 932 }, { width: 1440, height: 900 }]) {
+    await page.setViewportSize(size);
+    await openEntrance(page);
+    await page.locator('.d-language__option[data-locale="en"]').click();
+    await page.locator('[data-scene="question1"]').waitFor();
+
+    const geometry = await page.evaluate(() => {
+      const scroller = document.querySelector('.d-entrance__content');
+      const track = document.querySelector('.d-scroll-track');
+      const pin = document.querySelector('.d-scroll-pin');
+      return {
+        distance: track.offsetHeight - pin.offsetHeight,
+        pinHeight: pin.offsetHeight,
+        viewportHeight: window.innerHeight,
+        scrollWidth: scroller.scrollWidth,
+        clientWidth: scroller.clientWidth,
+        documentScrollWidth: document.documentElement.scrollWidth,
+        innerWidth: window.innerWidth
+      };
+    });
+
+    const label = `${size.width}x${size.height}`;
+    // The pin is exactly one viewport tall, so the centre lands at 50%.
+    expect(Math.abs(geometry.pinHeight - geometry.viewportHeight), `pin height, ${label}`)
+      .toBeLessThanOrEqual(1);
+    // There is genuine distance to scrub through.
+    expect(geometry.distance, `scrub distance, ${label}`).toBeGreaterThan(geometry.viewportHeight);
+    // Scrolling is vertical only.
+    expect(geometry.scrollWidth, `no sideways scroll, ${label}`)
+      .toBeLessThanOrEqual(geometry.clientWidth + 1);
+    expect(geometry.documentScrollWidth, `no page overflow, ${label}`)
+      .toBeLessThanOrEqual(geometry.innerWidth + 1);
+  }
+});
+
+test('the advance control never overlaps the hold hint while it is showing', async ({ page }) => {
+  for (const size of [{ width: 320, height: 568 }, { width: 844, height: 390 }, { width: 960, height: 540 }]) {
+    await page.setViewportSize(size);
+    await openEntrance(page);
+    // The hint is only on screen for 2s after the language is chosen, so the
+    // overlap check runs inside that window.
+    await page.locator('.d-language__option[data-locale="en"]').click();
+    await page.locator('[data-scene="question1"]').waitFor();
+    expect(await page.locator('.d-entrance__hint').getAttribute('data-state')).toBe('visible');
 
     const overlap = await page.evaluate(() => {
       const a = document.querySelector('.d-scene__advance').getBoundingClientRect();
@@ -355,10 +400,13 @@ test('at 200% and 400% zoom the background still covers and content reflows', as
     const state = await page.evaluate(() => {
       const content = document.querySelector('.d-entrance__content');
       const style = getComputedStyle(content);
-      const skip = document.querySelector('.d-entrance__skip').getBoundingClientRect();
+      const option = document.querySelector('.d-language__option').getBoundingClientRect();
       return {
         overflowY: style.overflowY,
-        reachable: skip.top >= -0.5 && skip.right <= window.innerWidth + 0.5,
+        reachable:
+          option.top >= -0.5 &&
+          option.left >= -0.5 &&
+          option.right <= window.innerWidth + 0.5,
         horizontalOverflow: document.documentElement.scrollWidth > window.innerWidth + 1
       };
     });
