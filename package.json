@@ -11,7 +11,8 @@
     "lint": "next lint",
     "fixtures": "node tools/make-fixtures.mjs",
     "test": "playwright test",
-    "test:report": "playwright show-report"
+    "test:report": "playwright show-report",
+    "export:preview": "PREVIEW_EXPORT=1 next build"
   },
   "devDependencies": {
     "@playwright/test": "^1.56.0",
