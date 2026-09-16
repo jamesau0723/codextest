@@ -44,33 +44,27 @@ iOS Safari accepts. VP9 is there for Chromium builds compiled without
 proprietary codecs, which includes the browser this project tests in; that is
 how the suite can exercise the real footage at all.
 
-#### The editorial decision you need to approve
+#### The editorial decision — APPROVED 2026-09-16
 
 **The encodes are trimmed to 18.0 s — the wide shot only, stopping just before
-the dissolve.** This is a proposal, not a settled call.
+the dissolve.** The client chose this option; it is settled.
 
-The close-up cannot survive a full-viewport crop. On a phone in portrait only
+The close-up could not survive a full-viewport crop. On a phone in portrait only
 **26 % of the source width is visible**, and the face sits right of centre:
 
-- at the alignment the wide shot needs (x = 20 %) the close-up is almost
+- at the alignment the wide shot needs (x = 20 %) the close-up was almost
   entirely empty red wall, with a sliver of hair at the edge;
-- even a centred crop cuts the face in half.
+- even a centred crop cut the face in half.
 
-Spec §7.5 forbids silently zooming further in or letting the layout letterbox,
-and asks for shot-specific framing to be approved rather than assumed. So the
-trim is the honest option that needs your sign-off. Three ways forward:
+The alternatives that were offered and not taken: encoding the full 21.1 s, or
+supplying a re-framed close-up that could carry its own alignment. Either is a
+`npm run media` change away — nothing in the code depends on the duration — and
+the original file is untouched.
 
-1. **Keep the trim** (what ships now) — one composition, one alignment, a
-   gently paced 18 s loop with no cut while anyone is reading.
-2. **Use the full 21.1 s** — re-encode without `-t 18.0`; nothing in the code
-   depends on the duration. The loop then ends on a half-cropped close-up.
-3. **Supply a re-framed close-up** centred on the face, and it can be given its
-   own alignment.
-
-The original file is untouched. Note also that the trimmed loop restarts with a
-visible jump, since the camera is locked off but the performers have moved; a
-short cross-dissolve at the loop point would hide it, and is another editorial
-change rather than something to do silently.
+**One related item is still open and was not part of the approval.** The trimmed
+loop restarts with a visible jump: the camera is locked off but the performers
+have moved between t=18 s and t=0. A short cross-dissolve at the loop point
+would hide it. That is a further editorial change, so it has not been made.
 
 #### Crop alignment, chosen against the real frames
 
@@ -426,7 +420,7 @@ arrives — they are what the crop-alignment decision should be made from.
 
 | # | Item | Status |
 |---|---|---|
-| 1 | ~~Real performance footage~~ | **Closed.** Supplied, inspected frame by frame, encoded, wired up, and measured. What remains is your sign-off on the 18 s trim described in §1.1. |
+| 1 | ~~Real performance footage~~ | **Closed.** Supplied, inspected frame by frame, encoded, wired up, measured, and the 18 s trim approved on 2026-09-16. The only related item left open is the loop-point jump described in §1.1, which was not part of the approval. |
 | 2 | **Real iOS Safari** | **Not run.** No device or Safari build available here. Inline playback, address-bar expand/collapse, safe-area insets, rotation and gesture interception are unverified on iOS. |
 | 3 | **Real Android Chrome** | **Not run.** Same caveats. |
 | 4 | **Desktop Safari, Firefox, Edge** | **Not run.** Only headless Chromium 141 was available. Firefox/Safari `dvh`, `object-position` and Pointer Events behaviour is unverified. |

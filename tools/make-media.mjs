@@ -12,12 +12,14 @@
  *
  *   pip install imageio-ffmpeg
  *
- * ── THE TRIM IS AN EDITORIAL DECISION ───────────────────────────────────────
+ * ── THE TRIM IS AN APPROVED EDITORIAL DECISION ──────────────────────────────
  * TRIM_SECONDS stops just before a cross-dissolve at t≈18.15s into a 2.3s
- * close-up of the pianist. The close-up cannot survive a full-viewport crop: a
- * phone in portrait shows only 26% of the source width and the face sits right
- * of centre, so the alignment the wide shot needs leaves almost nothing but
- * empty wall. Set TRIM_SECONDS to null to encode the whole clip.
+ * close-up of the pianist. The close-up could not survive a full-viewport crop:
+ * a phone in portrait shows only 26% of the source width and the face sits
+ * right of centre, so the alignment the wide shot needs left almost nothing but
+ * empty wall. The client approved the trim on 2026-09-16.
+ *
+ * Set TRIM_SECONDS to null to encode the whole clip instead.
  * ─────────────────────────────────────────────────────────────────────────────
  */
 import { execFileSync } from 'node:child_process';

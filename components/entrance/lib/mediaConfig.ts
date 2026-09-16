@@ -6,18 +6,17 @@
  * shot of the soloist and orchestra that cross-dissolves at t=18.15 into a
  * 2.3s close-up of the pianist.
  *
- * ── EDITORIAL DECISION, PENDING APPROVAL ────────────────────────────────────
- * The encodes below are trimmed to 18.0s: the wide shot only, ending just
- * before the dissolve. The close-up cannot survive a full-viewport crop — on a
- * phone in portrait only 26% of the source width is visible, and the face sits
- * right of centre, so the alignment the wide shot needs (x=20%) leaves almost
- * nothing but empty wall, and even a centred crop cuts the face in half.
+ * ── EDITORIAL DECISION: APPROVED ────────────────────────────────────────────
+ * The encodes are trimmed to 18.0s — the wide shot only, ending just before the
+ * dissolve. The client approved this on 2026-09-16.
  *
- * Spec 7.5 forbids silently zooming further in or letting the layout letterbox,
- * and asks for shot-specific framing to be approved rather than assumed. The
- * trim is therefore the proposal, not a settled decision. To use the full clip
- * instead, re-encode without `-t 18.0` — nothing in the code depends on the
- * duration. The original file is untouched.
+ * The close-up could not survive a full-viewport crop: on a phone in portrait
+ * only 26% of the source width is visible and the face sits right of centre, so
+ * the alignment the wide shot needs (x=20%) left almost nothing but empty wall,
+ * and even a centred crop cut the face in half.
+ *
+ * To change it, re-encode with a different trim via `npm run media` — nothing in
+ * the code depends on the duration. The original file is untouched.
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
