@@ -218,7 +218,13 @@ Emulation is **not** treated as equivalent to real-device verification.
    entrance's DOM and focus-trap order (one Shift+Tab away, and the wrap target
    from the last control), while initial focus goes to the scene's accessible
    heading as the spec allows.
-7. **VP8/WebM fixtures.** The ffmpeg bundled with Playwright is encode-only with
+7. **Word sizing survives a late font swap.** A display webfont that loads
+   after the first measurement would otherwise leave all ten words sized
+   against the fallback's metrics, so the word set is re-fitted once
+   `document.fonts.ready` resolves. Layout space is already reserved, so this
+   adjusts size without shifting controls, and it is a no-op where no webfont
+   is used — as in this repository, which ships none.
+8. **VP8/WebM fixtures.** The ffmpeg bundled with Playwright is encode-only with
    no image decoders, so fixtures are recorded via Chromium's `MediaRecorder`.
    Production footage would normally be MP4/H.264; the media configuration
    carries the type either way.

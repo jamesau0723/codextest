@@ -127,6 +127,16 @@ export class EntranceController {
     document.addEventListener('keydown', this.onKeyDown, true);
     document.addEventListener('visibilitychange', this.onVisibilityChange);
 
+    // A display font that swaps in after the first fit would leave the word set
+    // sized against the fallback's metrics, so re-fit once fonts settle. The
+    // layout is already reserved, so this adjusts size without shifting
+    // controls, and it is a no-op where no webfont is used.
+    document.fonts?.ready
+      .then(() => {
+        if (!this.destroyed) this.content.fitWords();
+      })
+      .catch(() => { /* font loading is best-effort */ });
+
     this.frameLoop.add(this.tick);
     this.enterState(STATE.LANGUAGE);
   }
